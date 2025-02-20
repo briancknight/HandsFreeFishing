@@ -6,12 +6,41 @@ from matplotlib import pyplot as plt
 from scipy.signal import find_peaks
 import cv2 as cv
 from pyefd import elliptic_fourier_descriptors, calculate_dc_coefficients, plot_efd, reconstruct_contour
-from preprocessing.eye_bounding_box import bounding_box
 from segment_anything import SamPredictor, sam_model_registry
 import pandas as pd
 import regex as re
 
 # helpers
+
+def get_largest_connected_component(mask):
+    """
+    Extracts the largest connected component from a binary mask.
+
+    Args:
+        mask (numpy.ndarray): A binary mask (0s and 1s or True/False).
+
+    Returns:
+        numpy.ndarray: A mask containing only the largest connected component,
+                       or an empty mask if no components are found.
+    """
+    num_labels, labels, stats, _ = cv.connectedComponentsWithStats(mask, connectivity=8)
+
+    if num_labels <= 1:
+        return np.zeros_like(mask)
+
+    largest_component_id = 1
+    largest_area = stats[1, cv.CC_STAT_AREA]
+
+    for i in range(2, num_labels):
+        area = stats[i, cv.CC_STAT_AREA]
+        if area > largest_area:
+            largest_area = area
+            largest_component_id = i
+
+    largest_component_mask = np.zeros_like(mask, dtype=np.uint8)
+    largest_component_mask[labels == largest_component_id] = 255
+
+    return largest_component_mask
 
 def get_grid_scale(img):
     """Computes the relative scale of the image by finding the best match for a template image of a square grid of various sizes
@@ -25,7 +54,7 @@ def get_grid_scale(img):
         bottom_right (np.ndarray): coordinates of bottom right corner of best match
     """
     img = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
-    template = cv.imread('/Users/brknight/Documents/GitHub/HandsFreeFishing/preprocessing/IMG_2937_grid_template.tif', cv.IMREAD_GRAYSCALE)
+    template = cv.imread('templates/IMG_2937_grid_template.tif', cv.IMREAD_GRAYSCALE)
     w, h = template.shape[::-1]
     
     meth = 'TM_CCOEFF_NORMED'
@@ -80,9 +109,9 @@ def get_grid_scale(img):
     
     return scale, top_left, bottom_right
 
-def compute_contour(fish_mask,ord=30):
+def compute_contour(mask,ord=30):
     
-    contours, hierarchy = cv.findContours((fish_mask).astype(np.uint8), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv.findContours((mask).astype(np.uint8), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     contour = np.squeeze(contours[-1], axis=1)
 
     coeffs = (elliptic_fourier_descriptors(contour, order=ord))
@@ -115,14 +144,13 @@ def get_length_landmarks(recon):
     # locate corners of caudal fin:
     x_max = x.max()
     caudal_peaks, _ = find_peaks(x, height = 0.8 * x_max)
-    if len(caudal_peaks) == 1:
-        valid_idxs = np.ndarray.flatten(np.argwhere(x > 0.5*x_max))
+    if len(caudal_peaks) == 1: 
+        # we don't find the right-most corners of the caudal fin
+        # so choose a point closest to average height of the back side of the fish
+        valid_idxs = np.ndarray.flatten(np.argwhere(x > 0.75*x_max))
         valid_ys = y[valid_idxs]
         idx = np.argmin(np.abs(np.mean(valid_ys)-valid_ys))
         lm16_idx = valid_idxs[idx]
-        # lm16_idx = caudal_peaks[0]
-        # lm16_idx = caudal_peaks[0]-8 + np.argmin(np.abs(y[caudal_peaks[0]-8:caudal_peaks[0]+8] - np.mean(y[caudal_peaks[0]-8:caudal_peaks[0]+8])))
-
     # landmark 16: the indent in the middle of the caudal fin 
     # will be specified to be the minimum x-value betwen the caudal fin corners
     else:
@@ -147,35 +175,16 @@ def rotate_image(image, angle, center_point=None):
     rot_mat = cv.getRotationMatrix2D(center_point, angle, 1.0)
     result = cv.warpAffine(image, rot_mat, (cols, rows), flags=cv.INTER_LINEAR)
     return result, rot_mat
-
-def write_full_segmentation(boxes, horiz_flip, vertical_flip):
-    
-    full_segmentation = np.zeros_like(image[:,:,0])
-    
-    for (i,box) in enumerate(boxes):
-            
-        mask, q, o = predictor.predict(box=box)
-
-        idx = np.argmax(q)
-        best_mask = mask[idx].astype(np.uint8)
-                                    
-        full_segmentation += (50*(i+1)) * best_mask
-
-    if horiz_flip=="1":
-        full_segmentation = full_segmentation[:,::-1]
-    if vertical_flip=="1":
-        full_segmentation = full_segmentation[::-1, :]
-        
-    if write_mask:
-        cv.imwrite('pred_all__mask.jpg', (full_segmentation[box_bounds[1]:box_bounds[3],box_bounds[0]:box_bounds[2]] + 25*fish_mask))
-
-        cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+dir+'/full_segementation_' + im_name, (25*fish_mask + full_segmentation[box_bounds[1]:box_bounds[3],box_bounds[0]:box_bounds[2]]))
-        
+  
 # fish class, segments fish, fins, eyeball & computes a FL & (predicted) non-fin area
 class fish():
     
-    def __init__(self, fish_id, predictor, write_mask = True, scale=None, num_fish=None):
-        self.im_path, self.im_name, self.ext, self.dir = fish_id
+    def __init__(self, image_path, predictor, write_mask = True, scale=None, num_fish=None):
+        
+        self.im_path = image_path
+        image_path_split = os.path.split(self.im_path)
+        self.dir = os.path.split(image_path_split[0])[1]
+        self.im_name, self.ext = os.path.splitext(image_path_split[1])
         self.predictor = predictor
         self.scale=scale
         self.write_mask = write_mask
@@ -193,7 +202,12 @@ class fish():
         self.copy = np.copy(self.image)
         self.dims = np.shape(self.image[:,:,0])
         self.predictor.set_image(self.image)
-    
+        
+        if os.path.exists('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir):
+            pass
+        else:
+            os.mkdir('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir)
+            
     def input_measurements(self):
         # TODO
         pass
@@ -278,6 +292,7 @@ class fish():
         print('for: ', self.im_path)
         print('fork length is: ', FL)
         print('area is: ', self.area)
+        print('no fin area is: ', self.no_fin_area)
 
                 
         fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
@@ -325,7 +340,6 @@ class fish():
         (m,n) = self.cropped_dims
 
         box = np.array([np.max([np.min(x_vals),0]), np.max([np.min(y_vals),0]), np.min([np.max(x_vals), n]), np.min([np.max(y_vals), m])])
-        print(box)
         box = box + np.array([self.box_bounds[0], self.box_bounds[1], self.box_bounds[0], self.box_bounds[1]])
         
         if self.horiz_flip=="1":
@@ -352,9 +366,6 @@ class fish():
         min_y = eye_level - mms/self.scale/2
         max_y = eye_level + mms/self.scale/2
 
-        print(min_x, max_x, min_y, max_y)
-        
-        print("\n\n max adipose fin length searched for: ", mms/self.scale, " pixels to estimate ", mms, "mms\n\n")
         tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
         bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
         tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
@@ -376,7 +387,7 @@ class fish():
         # caudal_box = np.array([max_x - 18/scale, min_y, max_x,  max_y])
 
         mms = self.FL*caudal_ratio # estimate what proportion of the fish length will contain the caudal fin
-        print("\n\n max caudal fin length searched for: ", mms/self.scale, " pixels to estimate ", mms, "mms\n\n")
+
         tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x-mms/self.scale,min_y]) - self.rot_mat[:,2])
         bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x-mms/self.scale,max_y]) - self.rot_mat[:,2])
         tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,max_y]) - self.rot_mat[:,2])
@@ -403,10 +414,7 @@ class fish():
         max_x = top_x[0] + mms/self.scale/2
         max_y = top_y[0] + mms/self.scale/2
         min_y = top_y[0] - mms/self.scale/10
-
-        print(min_x, max_x, min_y, max_y)
-        
-        print("\n\n max dorsal fin length searched for: ", mms/self.scale, " pixels to estimate ", mms, "mms\n\n")
+            
         tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
         bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
         tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
@@ -434,9 +442,6 @@ class fish():
         max_y = pectoral_y[0] + mms/self.scale/2
         min_y = pectoral_y[0] - mms/self.scale/2
 
-        print(min_x, max_x, min_y, max_y)
-        
-        print("\n\n max pectoral fin length searched for: ", mms/self.scale, " pixels to estimate ", mms, "mms\n\n")
         tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
         bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
         tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
@@ -451,7 +456,7 @@ class fish():
     def get_pelvic_box(self, pectoral_ratio):
         x = self.recon_offset_rotated[:,0]
         y = self.recon_offset_rotated[:,1]
-        x_left_middle_idxs=np.argwhere(np.array([x > 0.5*np.max(x), x < 0.6*np.max(x)]).all(axis=0))
+        x_left_middle_idxs=np.argwhere(np.array([x > 0.4*np.max(x), x < 0.6*np.max(x)]).all(axis=0))
         max_y = np.max(y[x_left_middle_idxs])
         pelvic_idx = np.argwhere(y==max_y)[0]
         pelvic_x = x[pelvic_idx]
@@ -464,9 +469,6 @@ class fish():
         max_y = pelvic_y[0] + mms/self.scale/10
         min_y = pelvic_y[0] - mms/self.scale/2
 
-        print(min_x, max_x, min_y, max_y)
-        
-        print("\n\n max pectoral fin length searched for: ", mms/self.scale, " pixels to estimate ", mms, "mms\n\n")
         tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
         bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
         tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
@@ -494,9 +496,6 @@ class fish():
         max_y = anal_y[0] + mms/(self.scale)/2
         min_y = anal_y[0] - mms/(self.scale)/2   
         
-        print(min_x, max_x, min_y, max_y)
-        
-        print("\n\n max anal fin length searched for: ", mms/self.scale, " pixels to estimate ", mms, "mms\n\n")
         tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x, min_y]) - self.rot_mat[:,2])
         bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x, max_y]) - self.rot_mat[:,2])
         tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x, min_y]) - self.rot_mat[:,2])
@@ -525,9 +524,6 @@ class fish():
         max_y = anal_y[0] + mms/self.scale/4
         min_y = anal_y[0] - mms/self.scale/5
 
-        print(min_x, max_x, min_y, max_y)
-        
-        print("\n\n max adipose fin length searched for: ", mms/self.scale, " pixels to estimate ", mms, "mms\n\n")
         tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
         bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
         tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
@@ -539,28 +535,26 @@ class fish():
                     
         self.adipose_box = self.get_box(x_vals, y_vals)
 
-    def get_mask(self, box, name="caudal"):
+    def get_mask(self, box):
                     
         mask, q, o = self.predictor.predict(box=box)
 
         idx = np.argmax(q)
         best_mask = mask[idx].astype(np.uint8)
-        # if self.self.horiz_flip=="1":
-        #     best_mask = best_mask[:,::-1]
-        # if self.self.vertical_flip=="1":
-        #     best_mask = best_mask[::-1, :]
-            
-        # best_mask_rgb = np.stack([best_mask, best_mask, best_mask], axis=-1)
-
-        # if self.self.write_mask:
-        #     cv.imwrite('pred_' + name + '_mask.jpg', 255*best_mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]] + self.fish_mask*125)
-        #     cv.imwrite('pred_' + name + '_mask2.jpg', (best_mask_rgb*self.copy)[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
-
-        #     # cv.imwrite('pred_caudal_mask2.jpg', best_caudal_mask_rgb*cropped_image)
-        #     cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir+'/'+name+'_mask_3_' + self.im_name, 255*best_mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
-
-        return best_mask
+        # kernel = np.ones((15, 15), np.uint8) 
+        # best_mask = cv.erode(best_mask, kernel,iterations=1)
         
+        return best_mask# get_largest_connected_component(best_mask)
+    
+    def write_mask(self, mask, name="caudal"):
+        
+        if self.horiz_flip=="1":
+            mask = mask[:,::-1]
+        if self.vertical_flip=="1":
+            mask = mask[::-1, :]
+            
+        cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir+'/'+name+'_mask_' + self.im_name + self.ext, 255*mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
+            
     def get_full_segmentations(self):
         
         self.full_segmentation = self.fish_mask_full.astype(np.uint8)
@@ -574,12 +568,12 @@ class fish():
             # creating a rough label image
             self.full_segmentation += (75*(i+1)) * mask
             
-            if i > 0: # don't zero out the eyeball 
+            if (i > 0 and i < 5): # don't zero out the eyeball, pelvic, or pectoral fins
                 self.no_fin_segmentation = self.no_fin_segmentation * (mask ==0)
-        
+                
         # for additional contrast
         self.full_segmentation = -50*(self.full_segmentation == 0) + self.full_segmentation
-        
+        self.no_fin_segmentation = cv.erode(self.no_fin_segmentation, np.ones((5,5), np.uint8))
         # if self.write_mask:
         #     if self.horiz_flip=="1":
         #         self.full_segmentation = self.full_segmentation[:,::-1]
@@ -603,13 +597,13 @@ class fish():
         self.get_pelvic_box(1/15)
         self.get_pectoral_box(1/15)
         
-        self.eye_mask = self.get_mask(self.eye_box, 'eye')
-        self.dorsal_mask = self.get_mask(self.dorsal_box, 'dorsal')
-        self.adipose_mask = self.get_mask(self.adipose_box, 'adipose')
-        self.caudal_mask = self.get_mask(self.caudal_box, 'caudal')
-        self.anal_mask = self.get_mask(self.anal_box, 'anal')
-        self.pelvic_mask = self.get_mask(self.pelvic_box, 'pelvic')
-        self.pectoral_mask = self.get_mask(self.pectoral_box, 'pectoral')
+        self.eye_mask = self.get_mask(self.eye_box, )
+        self.dorsal_mask = self.get_mask(self.dorsal_box)
+        self.adipose_mask = self.get_mask(self.adipose_box)
+        self.caudal_mask = self.get_mask(self.caudal_box)
+        self.anal_mask = self.get_mask(self.anal_box)
+        self.pelvic_mask = self.get_mask(self.pelvic_box)
+        self.pectoral_mask = self.get_mask(self.pectoral_box)
     
     def get_no_fin_area(self):
         
@@ -621,6 +615,26 @@ class fish():
         box_slice = np.s_[self.box_bounds[1]:self.box_bounds[3], self.box_bounds[0]:self.box_bounds[2]]
         
         self.no_fin_area = np.sum(no_fin_mask[box_slice]) * self.scale**2
+
+    def write_fin_masks(self):
+            
+        self.write_mask(self.eye_mask, name="eye")
+        self.write_mask(self.dorsal_mask, name="dorsal")
+        self.write_mask(self.adipose_mask, name="adipose")
+        self.write_mask(self.caudal_mask, name="caudal")
+        self.write_mask(self.anal_mask, name="anal")
+        self.write_mask(self.pelvic_mask, name="pelvic")
+        self.write_mask(self.pectoral_mask, name="pectoral")
+    
+    def write_full_masks(self):
+        
+        if os.path.exists('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir):
+            pass
+        else:
+            os.mkdir('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir)
+            
+        cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir+'/'+'full_mask_' + self.im_name + self.ext, 10*self.full_segmentation)
+        cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir+'/'+'no_fin_mask_' + self.im_name + self.ext, 10*self.no_fin_segmentation)
         
     def run(self):
         self.get_measurments()
@@ -630,16 +644,18 @@ class fish():
         self.get_fin_clips()
         self.get_full_segmentations()
         self.get_no_fin_area()
-
+        
 def main():
     # example:
-    fish_id = ('/Users/brknight/Documents/GitHub/HandsFreeFishing/sushi/SalmonViewerPics/110524FishID6d.jpg',
-               '110524FishID6d','.jpg','SalmonViewerPics')
+    image_path = '/Users/brknight/Documents/GitHub/HandsFreeFishing/sushi/example_fish/110524FishID6d.jpg'
+               
     sam = sam_model_registry['vit_l'](checkpoint="/Users/brknight/Documents/GitHub/HandsFreeFishing/sam_vit_l_0b3195.pth")
     predictor = SamPredictor(sam)   
     
-    myFish = fish(fish_id, predictor,write_mask=True)
+    myFish = fish(image_path, predictor,write_mask=True)
     myFish.run()
+    box = myFish.prediction_box
+    slice = np.s_[box[1]:box[3], box[0]:box[2]]
 
     print('\n\ntotal area = ', myFish.area, '\n\n')
     print('\n\ntotal non-fin area = ', myFish.no_fin_area, '\n\n')
@@ -647,15 +663,15 @@ def main():
     fig, axes = plt.subplots(1, 3)
 
     # Display the first image on the left subplot
-    axes[0].imshow(myFish.image)
+    axes[0].imshow(myFish.image[slice])
     axes[0].set_title('Raw Input')
 
-    # Display the second image on the right subplot
-    axes[1].imshow(myFish.full_segmentation)
+    # Display the second image on the middle subplot
+    axes[1].imshow(myFish.full_segmentation[slice])
     axes[1].set_title('Segmentation')
     
-    # Display the second image on the right subplot
-    axes[2].imshow(myFish.no_fin_segmentation)
+    # Display the third image on the right subplot
+    axes[2].imshow(myFish.no_fin_segmentation[slice])
     axes[2].set_title('No Fin Segmentation')
 
     # Adjust layout to prevent overlap
