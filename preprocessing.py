@@ -108,13 +108,13 @@ def get_rois_flips_and_bad_paths(im_paths, measurement_dir="measurements", num_f
 
 def main():
     from matplotlib import pyplot as plt
-    im_path= '/Users/brknight/Documents/GitHub/HandsFreeFishing/sushi/example_fish/110524FishID6c.jpg'
+    im_path= 'sushi/example_fish/110524FishID6c.jpg'
     im_paths = [im_path]
     
-    if os.path.exists('/Users/brknight/Documents/GitHub/HandsFreeFishing/measurments/example_fish'):
+    if os.path.exists('measurements/example_fish'):
         pass
     else:
-        os.mkdir('/Users/brknight/Documents/GitHub/HandsFreeFishing/measurments/example_fish')
+        os.mkdir('measurements/example_fish')
         
     get_rois_flips_and_bad_paths(im_paths)
 

@@ -203,10 +203,10 @@ class fish():
         self.dims = np.shape(self.image[:,:,0])
         self.predictor.set_image(self.image)
         
-        if os.path.exists('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir):
+        if os.path.exists('segmentations/'+self.dir):
             pass
         else:
-            os.mkdir('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir)
+            os.mkdir('segmentations/'+self.dir)
             
     def input_measurements(self):
         # TODO
@@ -292,7 +292,7 @@ class fish():
         print('for: ', self.im_path)
         print('fork length is: ', FL)
         print('area is: ', self.area)
-        print('no fin area is: ', self.no_fin_area)
+        # print('no fin area is: ', self.no_fin_area)
 
                 
         fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
@@ -402,7 +402,7 @@ class fish():
     def get_dorsal_box(self, dorsal_ratio):
         x = self.recon_offset_rotated[:,0]
         y = self.recon_offset_rotated[:,1]
-        x_middle_idxs=np.argwhere(np.array([x < 0.6*np.max(x), x > 0.4*np.max(x)]).all(axis=0))
+        x_middle_idxs=np.argwhere(np.array([x < 0.6*np.max(x), x > 0.5*np.max(x)]).all(axis=0)) # was x > 0.4*...
         min_y = np.min(y[x_middle_idxs])
         top_idx = np.argwhere(y==min_y)[0]
         top_x = x[top_idx]
@@ -412,8 +412,10 @@ class fish():
         
         min_x = top_x[0] - mms/self.scale/2
         max_x = top_x[0] + mms/self.scale/2
-        max_y = top_y[0] + mms/self.scale/2
-        min_y = top_y[0] - mms/self.scale/10
+        # max_y = top_y[0] + mms/self.scale/2
+        # min_y = top_y[0] - mms/self.scale/10
+        max_y = top_y[0] + mms/self.scale/3
+        min_y = top_y[0] - mms/self.scale/3
             
         tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
         bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
@@ -429,7 +431,7 @@ class fish():
     def get_pectoral_box(self, pectoral_ratio):
         x = self.recon_offset_rotated[:,0]
         y = self.recon_offset_rotated[:,1]
-        x_left_middle_idxs=np.argwhere(np.array([x > 0.1*np.mean(x), x < 0.4*np.mean(x)]).all(axis=0))
+        x_left_middle_idxs=np.argwhere(np.array([x > 0.2*np.mean(x), x < 0.4*np.mean(x)]).all(axis=0))
         max_y = np.max(y[x_left_middle_idxs])
         pectoral_idx = np.argwhere(y==max_y)[0]
         pectoral_x = x[pectoral_idx]
@@ -456,7 +458,7 @@ class fish():
     def get_pelvic_box(self, pectoral_ratio):
         x = self.recon_offset_rotated[:,0]
         y = self.recon_offset_rotated[:,1]
-        x_left_middle_idxs=np.argwhere(np.array([x > 0.4*np.max(x), x < 0.6*np.max(x)]).all(axis=0))
+        x_left_middle_idxs=np.argwhere(np.array([x > 0.5*np.max(x), x < 0.6*np.max(x)]).all(axis=0)) # was x > 0.5*..
         max_y = np.max(y[x_left_middle_idxs])
         pelvic_idx = np.argwhere(y==max_y)[0]
         pelvic_x = x[pelvic_idx]
@@ -553,7 +555,7 @@ class fish():
         if self.vertical_flip=="1":
             mask = mask[::-1, :]
             
-        cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir+'/'+name+'_mask_' + self.im_name + self.ext, 255*mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
+        cv.imwrite('segmentations/'+self.dir+'/'+name+'_mask_' + self.im_name + self.ext, 255*mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
             
     def get_full_segmentations(self):
         
@@ -628,13 +630,13 @@ class fish():
     
     def write_full_masks(self):
         
-        if os.path.exists('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir):
+        if os.path.exists('segmentations/'+self.dir):
             pass
         else:
-            os.mkdir('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir)
+            os.mkdir('segmentations/'+self.dir)
             
-        cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir+'/'+'full_mask_' + self.im_name + self.ext, 10*self.full_segmentation)
-        cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir+'/'+'no_fin_mask_' + self.im_name + self.ext, 10*self.no_fin_segmentation)
+        cv.imwrite('segmentations/'+self.dir+'/'+'full_mask_' + self.im_name + self.ext, 10*self.full_segmentation)
+        cv.imwrite('segmentations/'+self.dir+'/'+'no_fin_mask_' + self.im_name + self.ext, 10*self.no_fin_segmentation)
         
     def run(self):
         self.get_measurments()
@@ -647,9 +649,9 @@ class fish():
         
 def main():
     # example:
-    image_path = '/Users/brknight/Documents/GitHub/HandsFreeFishing/sushi/example_fish/110524FishID6d.jpg'
-               
-    sam = sam_model_registry['vit_l'](checkpoint="/Users/brknight/Documents/GitHub/HandsFreeFishing/sam_vit_l_0b3195.pth")
+    image_path = 'sushi/example_fish/110524FishID6c.jpg'
+
+    sam = sam_model_registry['vit_l'](checkpoint="./sam_vit_l_0b3195.pth")
     predictor = SamPredictor(sam)   
     
     myFish = fish(image_path, predictor,write_mask=True)
@@ -660,6 +662,8 @@ def main():
     print('\n\ntotal area = ', myFish.area, '\n\n')
     print('\n\ntotal non-fin area = ', myFish.no_fin_area, '\n\n')
     # Create a figure and a set of subplots
+    save_figures = True # save figures
+    
     fig, axes = plt.subplots(1, 3)
 
     # Display the first image on the left subplot
@@ -676,6 +680,9 @@ def main():
 
     # Adjust layout to prevent overlap
     plt.tight_layout()
+    if save_figures:
+        plt.savefig('fin_clipping_example.eps',dpi=200)
+        plt.savefig('fin_clipping_example.png',dpi=200)
 
     # Show the plot
     plt.show()

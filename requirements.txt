@@ -1,5 +1,10 @@
+numpy==1.24.4
+torch==2.2.2 --no-cache-dir
+torchaudio==2.2.2 --no-cache-dir
+torchvision==0.17.2 --no-cache-dir
 contourpy==1.3.1
 cycler==0.12.1
+et_xmlfile==2.0.0
 filelock==3.17.0
 fonttools==4.56.0
 fsspec==2025.2.0
@@ -9,8 +14,8 @@ MarkupSafe==3.0.2
 matplotlib==3.10.0
 mpmath==1.3.0
 networkx==3.4.2
-numpy==1.24.4
 opencv-python==4.11.0.86
+openpyxl==3.1.5
 packaging==24.2
 pandas==2.2.3
 pillow==11.1.0
@@ -20,12 +25,8 @@ python-dateutil==2.9.0.post0
 pytz==2025.1
 regex==2024.11.6
 scipy==1.15.1
-segment_anything @ git+https://github.com/facebookresearch/segment-anything.git@dca509fe793f601edb92606367a655c15ac00fdf
 six==1.17.0
 sympy==1.13.3
 tifffile==2025.1.10
-torch==2.2.2
-torchaudio==2.2.2
-torchvision==0.17.2
 typing_extensions==4.12.2
 tzdata==2025.1
