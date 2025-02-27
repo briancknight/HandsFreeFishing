@@ -227,6 +227,10 @@ class fish():
             roi = [int(roi_str[0]), int(roi_str[1]), int(roi_str[2]), int(roi_str[3])]
             self.horiz_flip = crop_data[1]
             self.vertical_flip = crop_data[2]
+            if len(crop_data) > 3:
+                self.quality = crop_data[3]
+            else:
+                self.quality=None
 
             self.prediction_box = np.array([roi[0],roi[1],roi[0]+roi[2], roi[1]+roi[3]])
         else:

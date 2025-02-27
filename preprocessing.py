@@ -43,6 +43,7 @@ def get_rois_flips_and_bad_paths(im_paths, measurement_dir="measurements", num_f
     rois = []
     horiz_flips = []
     vert_flips = []
+    qualities = []
     bad_idxs = []
     
     if num_fish is None:
@@ -86,17 +87,24 @@ def get_rois_flips_and_bad_paths(im_paths, measurement_dir="measurements", num_f
                 vertical_flip = input('\nEnter 0 if the fish is right-side up, 1 if upside down: ')
                 if vertical_flip=='1':
                     print('vertical flip is true')
+                    
+                quality = input('\nEnter 0 for a good quality image, 1 for bad quality: ')
+                if quality=='1':
+                    print('bad quality is true')
 
                 rois.append(roi)
+                horiz_flips.append(horiz_flip)
+                vert_flips.append(vertical_flip)
+                qualities.append(quality)
+                
                 if not os.path.exists(os.path.join(measurement_dir,dir)):
                     os.mkdir(os.path.join(measurement_dir,dir))
                     
                 with open(os.path.join(measurement_dir, dir, im_name+'.csv'), 'w', newline='') as myfile:
                     wr = csv.writer(myfile)
-                    wr.writerow([roi, horiz_flip, vertical_flip])
+                    wr.writerow([roi, horiz_flip, vertical_flip, quality])
                     
-                horiz_flips.append(horiz_flip)
-                vert_flips.append(vertical_flip)
+
             
         else:
             bad_idxs.append(i)
