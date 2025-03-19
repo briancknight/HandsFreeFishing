@@ -11,6 +11,8 @@ and a prediction of the fork length.
 - in terminal navigate to the directory you'd like to place this project
 - run the following: 
     git clone https://github.com/briancknight/HandsFreeFishing.git
+- then run:
+    cd HandsFreeFishing
 - create a python virtual environment by running the command:
     python -m venv myvenv
 - activate your new virtual environment:
@@ -41,6 +43,8 @@ the data you just provided for this test image. These can be changed manually if
 - In the Command Shell navigate to the directory you'd like to place this project
 - run the following command: 
     git clone https://github.com/briancknight/HandsFreeFishing.git
+- then run:
+    cd \HandsFreeFishing
 - create a python virtual environment by running the command:
     python -m venv myvenv
 - activate your new virtual environment:
