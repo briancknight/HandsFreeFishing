@@ -2,6 +2,10 @@
 
 *MAC OS INSTRUCTIONS*: 
 
+HandsFreeFishing is a Python package that leverages Meta's Segment Anything Model (SAM) for semi-automatic segmentation of images of juvenile Chinook Salmon.
+The output of the model consists of a segmentation of the entire fish, a segmentation of each individual fin, a prediction of the surface area the fish after clipping each fin,
+and a prediction of the fork length.
+
 ***To install***: 
 - Be sure to have at least Python >= 3.8 installed
 - In terminal navigate to the directory you'd like to place this project
