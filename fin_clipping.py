@@ -22,7 +22,7 @@ def get_largest_connected_component(mask):
     Returns:
         numpy.ndarray: A mask containing only the largest connected component,
                        or an empty mask if no components are found.
-    """
+    """    
     num_labels, labels, stats, _ = cv.connectedComponentsWithStats(mask, connectivity=8)
 
     if num_labels <= 1:
@@ -42,7 +42,7 @@ def get_largest_connected_component(mask):
 
     return largest_component_mask
 
-def get_grid_scale(img):
+def get_grid_scale(img,ds=2):
     """Computes the relative scale of the image by finding the best match for a template image of a square grid of various sizes
 
     Args:
@@ -53,7 +53,7 @@ def get_grid_scale(img):
         top_left (np.ndarray): coordinates of top left corner of best match
         bottom_right (np.ndarray): coordinates of bottom right corner of best match
     """
-    img = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
+    img = cv.cvtColor(img[::ds,::ds], cv.COLOR_RGB2GRAY)
     template = cv.imread('templates/IMG_2937_grid_template.tif', cv.IMREAD_GRAYSCALE)
     w, h = template.shape[::-1]
     
@@ -70,7 +70,6 @@ def get_grid_scale(img):
     brs=[]
     
     for sz in sizes:
-
         tmp_template = cv.resize(template, (0,0), fx = sz, fy = sz)
         w, h = tmp_template.shape[::-1]
         method = getattr(cv, meth)
@@ -105,7 +104,7 @@ def get_grid_scale(img):
     top_left = tls[best_idx]
     max_loc = max_locs[best_idx]
     
-    scale = 0.5 * ((bottom_right[0] - top_left[0]) + (bottom_right[1] - top_left[1]))
+    scale = 0.5 * ((bottom_right[0] - top_left[0]) + (bottom_right[1] - top_left[1]))*ds
     
     return scale, top_left, bottom_right
 
@@ -179,15 +178,17 @@ def rotate_image(image, angle, center_point=None):
 # fish class, segments fish, fins, eyeball & computes a FL & (predicted) non-fin area
 class fish():
     
-    def __init__(self, image_path, predictor, write_mask = True, scale=None, num_fish=None):
+    def __init__(self, image_path, predictor, write_masks = True, mask_ext = '.png', scale=None, num_fish=None):
         
         self.im_path = image_path
         image_path_split = os.path.split(self.im_path)
         self.dir = os.path.split(image_path_split[0])[1]
         self.im_name, self.ext = os.path.splitext(image_path_split[1])
+        self.mask_ext = mask_ext
         self.predictor = predictor
         self.scale=scale
-        self.write_mask = write_mask
+        self.write_masks = write_masks
+        self.n_steps=6
             
         # for images with multiple fish
         if num_fish is None:
@@ -201,23 +202,23 @@ class fish():
         self.image = cv.cvtColor(cv.imread(self.im_path), cv.COLOR_BGR2RGB)
         self.copy = np.copy(self.image)
         self.dims = np.shape(self.image[:,:,0])
-        self.predictor.set_image(self.image)
         
-        if os.path.exists('segmentations/'+self.dir):
+        if os.path.exists(os.path.join('segmentations',self.dir)):
             pass
         else:
-            os.mkdir('segmentations/'+self.dir)
+            os.mkdir(os.path.join('segmentations',self.dir))
             
     def input_measurements(self):
         # TODO
         pass
     
-    def get_measurments(self):
+    def get_measurements(self):
         # read in ROI and orienation data from csv, *or ask user for input* (*TODO)
-        if os.path.exists('measurements/' + self.dir + '/' + self.im_name+'.csv'):
+        measurement_path = os.path.join('measurements', self.dir, self.im_name+'.csv')
+        if os.path.exists(measurement_path):
 
-            write_mask=True
-            with open('measurements/' + self.dir + '/' + self.im_name+'.csv', newline='') as csvfile:
+            write_masks=True
+            with open(measurement_path, newline='') as csvfile:
                 reader=csv.reader(csvfile, delimiter=',')
                 for (j,row) in enumerate(reader):
                     if j==0:
@@ -236,20 +237,38 @@ class fish():
         else:
             pass #input_measurements(self)
         
-    def get_scale(self):
+    def get_scale(self,ds=8):
         # predict scale based on template matching with fixed grid image
+        
+        if self.frozen:
+            measurement_path = os.path.join('measurements', self.dir, self.im_name+'.csv')
+            with open(measurement_path, newline='') as csvfile:
+                reader=csv.reader(csvfile, delimiter=',')
+                for (j,row) in enumerate(reader):
+                    if j==1:
+                        scale_data = row
+            self.scale = float(scale_data[0])
+            
         if self.scale is None:
-            self.scale, tl, br = get_grid_scale(self.image)
+            self.scale, tl, br = get_grid_scale(self.image,ds=ds)
 
             self.scale = 5/self.scale
             
     def segment_fish(self):
-        fish_masks,q,o = self.predictor.predict(box=self.prediction_box, multimask_output=True)
-        idx=np.argmax(q)
-
-        self.fish_mask = fish_masks[idx]
-        self.fish_mask_full = self.fish_mask
         
+        fish_mask_path = os.path.join('segmentations', self.dir, 'inital_mask_' + self.im_name + self.mask_ext)
+        
+        if os.path.exists(fish_mask_path):
+            print('using existing segmentation at: ', fish_mask_path)
+            self.fish_mask = cv.imread(fish_mask_path)[:,:,0] == 255
+        else:
+            self.predictor.set_image(self.image)
+            fish_masks,q,o = self.predictor.predict(box=self.prediction_box, multimask_output=True)
+            idx=np.argmax(q)
+            self.fish_mask = fish_masks[idx]
+            
+        self.fish_mask_full = self.fish_mask
+                
         # flip as needed:
         if self.horiz_flip =='1':
             print('flipped horizontally')
@@ -270,11 +289,12 @@ class fish():
         self.offset = np.array([self.box_bounds[0], self.box_bounds[1]])
         
         # check to see if the segmentation is degenerate
-        if np.min(self.fish_mask.shape) < 50:
+        print(np.max(self.fish_mask.shape)*self.scale)
+        if np.max(self.fish_mask.shape)*self.scale < 5:
             self.degenerate=True
         else:
             self.degenerate=False
-
+        
     def level_fish(self):
         
         x_min_idx = np.argmin(self.recon[:,0])
@@ -309,7 +329,7 @@ class fish():
 
         cropped_masked_rotated_image, _ = rotate_image(self.cropped_masked_image, self.fish_angle, center_point=self.cp)
 
-        if self.write_mask:
+        if self.write_masks:
             cv.imwrite('cropped_masked_rotated.jpg', cropped_masked_rotated_image)
             # cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+dir+'/rotated_mask_' + im_name, cropped_masked_rotated_image)
 
@@ -330,15 +350,15 @@ class fish():
         fork_length_vector = self.recon_offset_rotated[lm16_idx] - self.recon_offset_rotated[0]
         self.FL = np.linalg.norm(fork_length_vector) * self.scale
 
-        with open('measurements/' + self.dir + '/' + self.im_name+'.csv', 'a', newline='') as csvfile:
+        with open(os.path.join('measurements', self.dir, self.im_name+'.csv'), 'a', newline='') as csvfile:
             writer=csv.writer(csvfile)
             writer.writerow([self.scale, self.FL, self.area])
         
-        if self.write_mask:
+        if self.write_masks:
             cv.imwrite('mask_pred_rotated.jpg', self.rotated_mask*255)
             cv.imwrite('fork_length_pts_rotated.jpg', (recon_imag_rot*128))
-            cv.imwrite('fork_length_pts_rotated2.jpg', (self.rotated_mask*128 + recon_imag_rot*128))
-            
+            cv.imwrite('fork_length_pts_rotated2.jpg', (self.rotated_mask*128 + recon_imag_rot*128)) 
+          
     def get_box(self, x_vals, y_vals):
         
         (m,n) = self.cropped_dims
@@ -558,13 +578,16 @@ class fish():
             mask = mask[:,::-1]
         if self.vertical_flip=="1":
             mask = mask[::-1, :]
-            
-        cv.imwrite('segmentations/'+self.dir+'/'+name+'_mask_' + self.im_name + self.ext, 255*mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
+        
+        if self.frozen:
+            (name, "_mask is already written!")
+        else:
+            cv.imwrite(os.path.join('segmentations', self.dir, name+'_mask_' + self.im_name + self.mask_ext), 255*mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
             
     def get_full_segmentations(self):
-        
-        self.full_segmentation = self.fish_mask_full.astype(np.uint8)
-        self.no_fin_segmentation = self.fish_mask_full.astype(np.uint8)
+        self.full_segmentation = np.stack([self.fish_mask_full, np.zeros_like(self.fish_mask_full), np.zeros_like(self.fish_mask_full)], axis=-1).astype(np.uint8)
+        # self.full_segmentation = self.fish_mask_full
+        self.no_fin_segmentation = self.fish_mask_full
         
         masks = [self.eye_mask, self.dorsal_mask, self.adipose_mask, self.caudal_mask,
                  self.anal_mask, self.pelvic_mask, self.pectoral_mask]
@@ -572,27 +595,101 @@ class fish():
         for (i,mask) in enumerate(masks):
             
             # creating a rough label image
-            self.full_segmentation += (75*(i+1)) * mask
+            self.full_segmentation[:,:,1] +=  mask
             
             if (i > 0 and i < 5): # don't zero out the eyeball, pelvic, or pectoral fins
                 self.no_fin_segmentation = self.no_fin_segmentation * (mask ==0)
                 
         # for additional contrast
-        self.full_segmentation = -50*(self.full_segmentation == 0) + self.full_segmentation
-        self.no_fin_segmentation = cv.erode(self.no_fin_segmentation, np.ones((5,5), np.uint8))
-        # if self.write_mask:
-        #     if self.horiz_flip=="1":
-        #         self.full_segmentation = self.full_segmentation[:,::-1]
-        #         self.no_fin_segmentation = self.no_fin_segmentation[:,::-1]
-        #     if self.vertical_flip=="1":
-        #         self.full_segmentation = self.full_segmentation[::-1, :]
-        #         self.no_fin_segmentation = self.no_fin_segmentation[::-1, :]
+        # self.full_segmentation = -50*(self.full_segmentation == 0) + self.full_segmentation
+        self.no_fin_segmentation = cv.erode(self.no_fin_segmentation*1.0, np.ones((5,5), np.uint8), iterations=3) * 255
+        
+        self.full_segmentation = (self.full_segmentation>0) * 255
+    
+    def filet_fish(self,n_steps=6, ord=10):
+    
+        nf_mask = self.no_fin_segmentation.copy()
+        if self.horiz_flip =='1':
+            print('flipped horizontally')
+            nf_mask = nf_mask[:,::-1]
+        if self.vertical_flip == '1':
+            print('flipped vertically')
+            nf_mask = nf_mask[::-1,:]
+            
+        self.nf_recon, self.nf_box_bounds = compute_contour(nf_mask, ord=ord)#3
+        self.nf_offset = np.array([self.nf_box_bounds[0], self.nf_box_bounds[1]])
+
+        x_min_idx = np.argmin(self.nf_recon[:,0])
+        x_max_idx = np.argmax(self.nf_recon[:,0])
+
+        recon_offset = self.nf_recon - self.nf_offset
+
+        fork_length_vector = self.nf_recon[x_max_idx] - self.nf_recon[x_min_idx]
+
+        fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
+            
+        self.nf_fish_angle = np.arccos(np.dot(np.array([1,0]), fork_length_dir))*180/np.pi
+        
+        if fork_length_dir[1] < 0:
+            self.nf_fish_angle = -1 * self.nf_fish_angle
+            
+        self.nf_cp = 0.5*(recon_offset[x_min_idx] + recon_offset[x_max_idx]) # average
+        rot_mat = cv.getRotationMatrix2D(self.nf_cp, self.nf_fish_angle, 1.0)
+
+        recon_offset_rotated =  (rot_mat[:2,:2]@(recon_offset.transpose())).transpose() + rot_mat[:,2]
+
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        recon_offset_rotated = np.roll(recon_offset_rotated, -x_min_idx, axis=0)
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        
+        recon_offset = (rot_mat[:2,:2].transpose()@((recon_offset_rotated - rot_mat[:,2]).transpose())).transpose()
+        center_of_mass = np.mean(recon_offset, axis=0) + self.nf_offset
+        
+        top_step = int(np.ceil(x_max_idx/(n_steps)))
+        bottom_step = int(np.ceil((len(recon_offset) - x_max_idx)/n_steps))
+        top_steps = np.s_[0:x_max_idx:top_step]
+        bottom_steps = np.s_[x_max_idx:len(recon_offset):bottom_step]
+        
+        steps = np.r_[top_steps, bottom_steps]
+        sector_pts = recon_offset[steps].astype(int) + self.nf_offset
+        
+        self.filled_sectors=[]
+        self.sector_areas = []
+        
+        lines = [np.linspace(sector_pts[n], center_of_mass, 150) for n in range(len(steps))]
                 
-        #     cv.imwrite('pred_all_mask.jpg', (self.full_segmentation[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]] + 50*self.fish_mask))
-        #     cv.imwrite('pred_body_mask.jpg', 255*self.no_fin_segmentation[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
+        for n in range(len(steps)):
+            recon_sector_im = np.zeros_like(self.fish_mask_full)
+            
+            if n == len(steps)-1:
+                sector = recon_offset[steps[n]:] + self.nf_offset
+                contour = np.concatenate([sector, lines[n],lines[0]])
+            else:
+                sector = recon_offset[steps[n]:steps[n+1]] + self.nf_offset
+                contour = np.concatenate([sector, lines[n],lines[n+1]])
+                
+            seed = np.mean(contour,axis=0).astype(int)
 
-        #     cv.imwrite('/Users/brknight/Documents/GitHub/HandsFreeFishing/segmentations/'+self.dir+'/full_segementation_' + self.im_name, (50*self.fish_mask + self.full_segmentation[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]]))
+            for idx in contour.astype(int):
+                recon_sector_im[idx[1]-2:idx[1]+2,idx[0]-2:idx[0]+2] = 255
 
+            h, w = recon_sector_im.shape[:2]
+            mask = np.zeros((h+2, w+2), np.uint8)
+            sector_floodfill = recon_sector_im.astype(np.uint8)
+            cv.floodFill(sector_floodfill, mask, seed,255)
+            
+            if self.horiz_flip =='1':
+                sector_floodfill = sector_floodfill[:,::-1]
+            if self.vertical_flip == '1':
+                sector_floodfill = sector_floodfill[::-1,:]
+            
+            kernel = np.ones((3, 3), np.uint8)
+            # self.filled_sectors.append(cv.dilate(sector_floodfill,kernel))
+            self.filled_sectors.append(sector_floodfill)
+            self.sector_areas.append(np.sum(sector_floodfill > 0)*(self.scale**2))
+                 
     def get_fin_clips(self):
         
         self.get_eye_box(1/20)    
@@ -603,7 +700,7 @@ class fish():
         self.get_pelvic_box(1/15)
         self.get_pectoral_box(1/15)
         
-        self.eye_mask = self.get_mask(self.eye_box, )
+        self.eye_mask = self.get_mask(self.eye_box)
         self.dorsal_mask = self.get_mask(self.dorsal_box)
         self.adipose_mask = self.get_mask(self.adipose_box)
         self.caudal_mask = self.get_mask(self.caudal_box)
@@ -620,7 +717,7 @@ class fish():
             no_fin_mask = no_fin_mask[::-1, :]
         box_slice = np.s_[self.box_bounds[1]:self.box_bounds[3], self.box_bounds[0]:self.box_bounds[2]]
         
-        self.no_fin_area = np.sum(no_fin_mask[box_slice]) * self.scale**2
+        self.no_fin_area = np.sum(no_fin_mask[box_slice]>0) * self.scale**2
 
     def write_fin_masks(self):
             
@@ -633,33 +730,113 @@ class fish():
         self.write_mask(self.pectoral_mask, name="pectoral")
     
     def write_full_masks(self):
+        if self.degenerate:
+            print('write_full_masks failed due to degenerate segmentation')
         
-        if os.path.exists('segmentations/'+self.dir):
-            pass
         else:
-            os.mkdir('segmentations/'+self.dir)
-            
-        cv.imwrite('segmentations/'+self.dir+'/'+'full_mask_' + self.im_name + self.ext, 10*self.full_segmentation)
-        cv.imwrite('segmentations/'+self.dir+'/'+'no_fin_mask_' + self.im_name + self.ext, 10*self.no_fin_segmentation)
+            if os.path.exists(os.path.join('segmentations', self.dir)):
+                pass
+            else:
+                os.mkdir(os.path.join('segmentations', self.dir))
+                
+            cv.imwrite(os.path.join('segmentations', self.dir, 'inital_mask_' + self.im_name + self.mask_ext), 255*self.fish_mask_full)  
+            cv.imwrite(os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext), 255*self.full_segmentation)
+            cv.imwrite(os.path.join('segmentations', self.dir, 'no_fin_mask_' + self.im_name + self.mask_ext), 255*self.no_fin_segmentation)
+    
+    def check_freezer(self):
+        self.frozen=False
+        nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_mask_' + self.im_name + self.mask_ext)
+        full_seg_path = os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext)
+        dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_mask_' + self.im_name + self.mask_ext)
+        adipose_seg_path = os.path.join('segmentations', self.dir, 'adipose_mask_' + self.im_name + self.mask_ext)
+        caudal_seg_path = os.path.join('segmentations', self.dir, 'caudal_mask_' + self.im_name + self.mask_ext)
+        anal_seg_path = os.path.join('segmentations', self.dir, 'anal_mask_' + self.im_name + self.mask_ext)
+        pelvic_seg_path = os.path.join('segmentations', self.dir, 'pelvic_mask_' + self.im_name + self.mask_ext)
+        pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_mask_' + self.im_name + self.mask_ext)
+        eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
+        
+        all_paths = [nf_seg_path, full_seg_path, dorsal_seg_path, adipose_seg_path, 
+                     caudal_seg_path, anal_seg_path, pelvic_seg_path, pectoral_seg_path, 
+                     eye_seg_path]
+        
+        if np.all([os.path.exists(path) for path in all_paths]):
+            self.frozen=True
+
+        print('frozen? ', self.frozen)
+        
+    def thaw(self):
+        nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_mask_' + self.im_name + self.mask_ext)
+        full_seg_path = os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext)
+        dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_mask_' + self.im_name + self.mask_ext)
+        adipose_seg_path = os.path.join('segmentations', self.dir, 'adipose_mask_' + self.im_name + self.mask_ext)
+        caudal_seg_path = os.path.join('segmentations', self.dir, 'caudal_mask_' + self.im_name + self.mask_ext)
+        anal_seg_path = os.path.join('segmentations', self.dir, 'anal_mask_' + self.im_name + self.mask_ext)
+        pelvic_seg_path = os.path.join('segmentations', self.dir, 'pelvic_mask_' + self.im_name + self.mask_ext)
+        pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_mask_' + self.im_name + self.mask_ext)
+        eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
+
+        self.no_fin_segmentation=cv.imread(nf_seg_path)[:,:,0] == 255   
+        self.full_segmentation=cv.imread(full_seg_path)   
+        self.dorsal_mask=cv.imread(dorsal_seg_path)
+        self.adipose_mask=cv.imread(adipose_seg_path)  
+        self.caudal_mask=cv.imread(caudal_seg_path)  
+        self.anal_mask=cv.imread(anal_seg_path)  
+        self.pelvic_mask=cv.imread(pelvic_seg_path)
+        self.pectoral_mask=cv.imread(pectoral_seg_path)
+        self.eye_mask=cv.imread(eye_seg_path)
         
     def run(self):
-        self.get_measurments()
-        self.get_scale()
+        self.check_freezer()
+            
+        if self.frozen:
+            self.re_run()
+        
+        else:
+            self.get_measurements()
+            self.get_scale(ds=1)
+            self.segment_fish()
+        
+            if self.degenerate:
+                print('degenerate!\n')
+                self.no_fin_area=None
+                self.FL = None
+                self.area = None
+                self.sector_areas=[None]*(2*self.n_steps)
+            else: 
+                self.level_fish()
+                self.get_fin_clips()
+                self.get_full_segmentations()
+                self.get_no_fin_area()
+                self.filet_fish(n_steps=self.n_steps)
+            
+    def re_run(self):
+        
+        self.get_measurements()
+        self.get_scale(ds=2)
         self.segment_fish()
         self.level_fish()
-        self.get_fin_clips()
-        self.get_full_segmentations()
+        print('level fish done\n')
+        # self.get_fin_clips()
+        print('\nthawing...\n')
+        self.thaw()
+        print('\nthawed\n')
         self.get_no_fin_area()
+        print('get no fin area done\n')
+        self.filet_fish(n_steps=self.n_steps)
+        print('filet done\n')
         
 def main():
     # example:
-    image_path = 'sushi/example_fish/110524FishID6c.jpg'
+    image_path = os.path.join('sushi','example_fish', '110524FishID14c.jpg')
 
     sam = sam_model_registry['vit_l'](checkpoint="./sam_vit_l_0b3195.pth")
     predictor = SamPredictor(sam)   
     
-    myFish = fish(image_path, predictor,write_mask=True)
+    myFish = fish(image_path, predictor,write_masks=True)
     myFish.run()
+
+    print('\n\ntotal non-fin sector area = ', np.sum(myFish.sector_areas,axis=0), '\n\n')
+        
     box = myFish.prediction_box
     slice = np.s_[box[1]:box[3], box[0]:box[2]]
 
@@ -668,19 +845,22 @@ def main():
     # Create a figure and a set of subplots
     save_figures = True # save figures
     
-    fig, axes = plt.subplots(1, 3)
+    fig, axes = plt.subplots(2, 2)
 
     # Display the first image on the left subplot
-    axes[0].imshow(myFish.image[slice])
-    axes[0].set_title('Raw Input')
+    axes[0,0].imshow(myFish.image[slice])
+    axes[0,0].set_title('Raw Input')
 
     # Display the second image on the middle subplot
-    axes[1].imshow(myFish.full_segmentation[slice])
-    axes[1].set_title('Segmentation')
+    axes[0,1].imshow(myFish.full_segmentation[slice])
+    axes[0,1].set_title('Segmentation')
     
     # Display the third image on the right subplot
-    axes[2].imshow(myFish.no_fin_segmentation[slice])
-    axes[2].set_title('No Fin Segmentation')
+    axes[1,1].imshow(np.sum(myFish.filled_sectors,axis=0)[slice])
+    axes[1,1].set_title('Fileted Segmentation')
+    # Display the third image on the right subplot
+    axes[1,0].imshow(myFish.no_fin_segmentation[slice])
+    axes[1,0].set_title('No Fin Segmentation')
 
     # Adjust layout to prevent overlap
     plt.tight_layout()

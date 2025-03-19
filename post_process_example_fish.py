@@ -6,7 +6,7 @@ from scipy.stats import linregress
 
 
 def main():
-    dir = 'measurements/example_fish'
+    dir = os.path.join('measurements','example_fish')
     df = pd.read_excel(os.path.join(dir,'output.xlsx'),sheet_name=0)
     
     save_figures=False
@@ -153,5 +153,69 @@ def main():
         # Show the plot
         plt.show()
     
+    
+def fish_filet():
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error, r2_score
+
+    # dir = os.path.join('measurements','example_fish')
+    # data = pd.read_excel(os.path.join(dir,'output.xlsx'),sheet_name=0)
+    dir = os.path.join('measurements','CABA_Fish')
+    data = pd.read_excel(os.path.join(dir,'combined_output.xlsx'),sheet_name=0)
+
+    X = data[['head_half','tail_half', 'pred FL']]
+
+    # Define independent and dependent variables
+    X = data[['pred FL', 'pred area (no fins)', 'Sector Area 0', 'Sector Area 1', 
+              'Sector Area 2','Sector Area 3', 'Sector Area 4','Sector Area 5',
+              'Sector Area 6', 'Sector Area 7', 'Sector Area 8', 'Sector Area 9',
+              'Sector Area 10', 'Sector Area 11']]# Select your independent variables
+    # X = data[['pred FL', 'pred area (no fins)', 'Sector Area 0', 
+    #         'Sector Area 2', 'Sector Area 4', 'Sector Area 6', 
+    #         'Sector Area 8','Sector Area 10']]# Select your independent variables
+    # X = data[['pred FL', 'pred area (no fins)']]# Select your independent variables
+    
+    
+    X = data[['pred area (no fins)', 'pred FL']]#
+    # X = data[['Sector Area 0', 
+    #           'Sector Area 2', 'Sector Area 4',
+    #           'Sector Area 6',
+    #           'Sector Area 8',
+    #           'Sector Area 10',]] # Select your independent variables
+    y = data['Weight (g)']  # Select your dependent variable
+
+    # Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=101)
+
+    # Create a linear regression object
+    model = LinearRegression(positive=True)
+
+    # Train the model
+    model.fit(X_train, y_train)
+
+    # Make predictions
+    y_pred = model.predict(X_test)
+
+    # Evaluate the model
+    print("GT Weights: \n", np.array(y_test), "\n")
+    print("Pred Weights: \n", np.round(y_pred,2), "\n")
+    mae = mean_absolute_error(y_test, y_pred)
+    mape = mean_absolute_percentage_error(y_test, y_pred)*100
+
+
+    mse = mean_squared_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+
+    print('Mean Squared Error:', mse)
+    print('Mean Absolute Error:', mae)
+    print('Mean Absolute Percentage Error:', mape)
+    print('R-squared:', r2)
+
+    # Print the coefficients
+    print('Intercept:', model.intercept_)
+    print('Coefficients:', model.coef_)
+    
 if __name__ == "__main__":
-    main()
+    fish_filet()
