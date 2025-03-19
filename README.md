@@ -7,19 +7,19 @@ The output of the model consists of a segmentation of the entire fish, a segment
 and a prediction of the fork length.
 
 ***To install***: 
-- Be sure to have at least Python >= 3.8 installed
-- In terminal navigate to the directory you'd like to place this project
-- run the following command in terminal (dos): 
+- be sure to have at least Python >= 3.8 installed
+- in terminal navigate to the directory you'd like to place this project
+- run the following: 
     git clone https://github.com/briancknight/HandsFreeFishing.git
-- create a python virtual environment:
-    e.g.: python -m venv myvenv
-- activate:
+- create a python virtual environment by running the command:
+    python -m venv myvenv
+- activate your new virtual environment:
     source myvenv/bin/activate
 - install required packages (not including segment-anything):
     pip install -r requirements.txt
 - install segment anything:
     pip install git+https://github.com/facebookresearch/segment-anything.git
-- finally, visit https://github.com/facebookresearch/segment-anything, scroll down to the 'Model Checkpoints' section, and download the ViT-H SAM model. Move this to the HandsFreeFishing directory. *NOTE* this model is about 2.5 GB in size
+- finally, visit https://github.com/facebookresearch/segment-anything, scroll down to the 'Model Checkpoints' section, and download the ViT-l SAM model. Move this to the HandsFreeFishing directory. *NOTE* this model is about 2.5 GB in size
 
 ***To test your installation:***
 - in the command line, run:
@@ -41,10 +41,10 @@ the data you just provided for this test image. These can be changed manually if
 - In the Command Shell navigate to the directory you'd like to place this project
 - run the following command: 
     git clone https://github.com/briancknight/HandsFreeFishing.git
-- create a python virtual environment:
-    e.g.: python -m venv myvenv
-- activate the virtual environment:
-    myvenv/bin/activate
+- create a python virtual environment by running the command:
+    python -m venv myvenv
+- activate your new virtual environment:
+    myvenv\Scripts\activate
 - install required packages (not including segment-anything):
     pip install -r requirements.txt
 - install segment anything:
