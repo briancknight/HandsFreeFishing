@@ -206,7 +206,7 @@ class fish():
         if os.path.exists(os.path.join('segmentations',self.dir)):
             pass
         else:
-            os.mkdir(os.path.join('segmentations',self.dir))
+            os.makedirs(os.path.join('segmentations',self.dir),exist_ok=True)
             
     def input_measurements(self):
         # TODO
@@ -737,7 +737,7 @@ class fish():
             if os.path.exists(os.path.join('segmentations', self.dir)):
                 pass
             else:
-                os.mkdir(os.path.join('segmentations', self.dir))
+                os.makedirs(os.path.join('segmentations', self.dir),exist_ok=True)
                 
             cv.imwrite(os.path.join('segmentations', self.dir, 'inital_mask_' + self.im_name + self.mask_ext), 255*self.fish_mask_full)  
             cv.imwrite(os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext), 255*self.full_segmentation)

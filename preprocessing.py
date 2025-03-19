@@ -122,7 +122,7 @@ def main():
     if os.path.exists(os.path.join('measurements','example_fish')):
         pass
     else:
-        os.mkdir(os.path.join('measurements','example_fish'))
+        os.makedirs(os.path.join('measurements','example_fish'),exist_ok=True)
         
     get_rois_flips_and_bad_paths(im_paths)
 
