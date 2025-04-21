@@ -76,21 +76,24 @@ def get_rois_flips_and_bad_paths(im_paths, measurement_dir="measurements", num_f
                 
                 ds = 3
                 cropped_image, roi = user_crop_image(image=image, ds=ds)
-
-                horiz_flip=False
-                vertical_flip=False
                 
                 horiz_flip = input('Enter 0 if the fish is facing left, 1 if right: ')
                 if horiz_flip=='1':
                     print('horizontal flip is true')
+                else:
+                    horiz_flip='0'
 
                 vertical_flip = input('\nEnter 0 if the fish is right-side up, 1 if upside down: ')
                 if vertical_flip=='1':
                     print('vertical flip is true')
+                else:
+                    vertical_flip='0'
                     
                 quality = input('\nEnter 0 for a good quality image, 1 for bad quality: ')
                 if quality=='1':
                     print('bad quality is true')
+                else:
+                    quality='0'
 
                 rois.append(roi)
                 horiz_flips.append(horiz_flip)

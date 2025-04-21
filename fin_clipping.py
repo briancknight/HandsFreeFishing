@@ -4,11 +4,13 @@ import csv
 from tifffile import imread, imwrite
 from matplotlib import pyplot as plt
 from scipy.signal import find_peaks
+from scipy.spatial import ConvexHull
 import cv2 as cv
 from pyefd import elliptic_fourier_descriptors, calculate_dc_coefficients, plot_efd, reconstruct_contour
 from segment_anything import SamPredictor, sam_model_registry
 import pandas as pd
 import regex as re
+from skimage.morphology import convex_hull_image
 
 # helpers
 
@@ -188,7 +190,8 @@ class fish():
         self.predictor = predictor
         self.scale=scale
         self.write_masks = write_masks
-        self.n_steps=6
+        self.n_steps=2
+        self.ord=100
             
         # for images with multiple fish
         if num_fish is None:
@@ -266,8 +269,9 @@ class fish():
             fish_masks,q,o = self.predictor.predict(box=self.prediction_box, multimask_output=True)
             idx=np.argmax(q)
             self.fish_mask = fish_masks[idx]
-            
-        self.fish_mask_full = self.fish_mask
+        
+        self.fish_mask =  get_largest_connected_component((self.fish_mask*255).astype(np.uint8))*255
+        self.fish_mask_full = np.copy(self.fish_mask)
                 
         # flip as needed:
         if self.horiz_flip =='1':
@@ -279,7 +283,7 @@ class fish():
             self.fish_mask=self.fish_mask[::-1,:]
             self.copy = self.copy[::-1, :]
             
-        self.recon, self.box_bounds = compute_contour(self.fish_mask, ord=40)#3
+        self.recon, self.box_bounds = compute_contour(self.fish_mask, ord=self.ord)#3
         self.fish_mask = self.fish_mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]]
         self.rgb_mask = np.stack([self.fish_mask, self.fish_mask, self.fish_mask], axis=-1)
         self.cropped_image = self.copy[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]]
@@ -289,9 +293,11 @@ class fish():
         self.offset = np.array([self.box_bounds[0], self.box_bounds[1]])
         
         # check to see if the segmentation is degenerate
-        print(np.max(self.fish_mask.shape)*self.scale)
-        if np.max(self.fish_mask.shape)*self.scale < 5:
+        print('max dimension size (mm): ', np.max(self.fish_mask.shape)*self.scale)
+        print(np.max(self.fish_mask.shape))
+        if np.max(self.fish_mask.shape)*self.scale < 8:
             self.degenerate=True
+            cv.imwrite(os.path.join('segmentations',self.dir,'degenerate_' + self.im_name + '.png'), self.fish_mask_full*255)
         else:
             self.degenerate=False
         
@@ -570,19 +576,20 @@ class fish():
         # kernel = np.ones((15, 15), np.uint8) 
         # best_mask = cv.erode(best_mask, kernel,iterations=1)
         
-        return best_mask# get_largest_connected_component(best_mask)
+        return get_largest_connected_component(best_mask)*255
     
     def write_mask(self, mask, name="caudal"):
         
-        if self.horiz_flip=="1":
-            mask = mask[:,::-1]
-        if self.vertical_flip=="1":
-            mask = mask[::-1, :]
-        
-        if self.frozen:
-            (name, "_mask is already written!")
-        else:
-            cv.imwrite(os.path.join('segmentations', self.dir, name+'_mask_' + self.im_name + self.mask_ext), 255*mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
+
+        cv.imwrite(os.path.join('segmentations', self.dir, name+'_mask_' + self.im_name + self.mask_ext), 255*mask)
+
+        # cv.imwrite(os.path.join('segmentations', self.dir, name+'_mask_' + self.im_name + self.mask_ext), 255*mask[self.prediction_box[1]:self.prediction_box[3],self.prediction_box[0]:self.prediction_box[2]])
+
+        # if self.frozen:
+        #     (name, "_mask is already written!")
+        # else:
+        #     # cv.imwrite(os.path.join('segmentations', self.dir, name+'_mask_' + self.im_name + self.mask_ext), 255*mask[self.box_bounds[1]:self.box_bounds[3],self.box_bounds[0]:self.box_bounds[2]])
+        #     cv.imwrite(os.path.join('segmentations', self.dir, name+'_mask_' + self.im_name + self.mask_ext), 255*mask[self.prediction_box[1]:self.prediction_box[3],self.prediction_box[0]:self.prediction_box[2]])
             
     def get_full_segmentations(self):
         self.full_segmentation = np.stack([self.fish_mask_full, np.zeros_like(self.fish_mask_full), np.zeros_like(self.fish_mask_full)], axis=-1).astype(np.uint8)
@@ -597,7 +604,8 @@ class fish():
             # creating a rough label image
             self.full_segmentation[:,:,1] +=  mask
             
-            if (i > 0 and i < 5): # don't zero out the eyeball, pelvic, or pectoral fins
+            # if (i > 0 and i < 5): # don't zero out the eyeball, pelvic, or pectoral fins
+            if (i > 0): # don't zero out the eyeball
                 self.no_fin_segmentation = self.no_fin_segmentation * (mask ==0)
                 
         # for additional contrast
@@ -615,6 +623,13 @@ class fish():
         if self.vertical_flip == '1':
             print('flipped vertically')
             nf_mask = nf_mask[::-1,:]
+        
+        nf_mask_temp = convex_hull_image(nf_mask)
+        if np.sum(nf_mask_temp > 0)*(self.scale**2)/self.no_fin_area > 1.25:
+            print('too much')
+            pass
+        else:
+            nf_mask = nf_mask_temp
             
         self.nf_recon, self.nf_box_bounds = compute_contour(nf_mask, ord=ord)#3
         self.nf_offset = np.array([self.nf_box_bounds[0], self.nf_box_bounds[1]])
@@ -623,7 +638,7 @@ class fish():
         x_max_idx = np.argmax(self.nf_recon[:,0])
 
         recon_offset = self.nf_recon - self.nf_offset
-
+        
         fork_length_vector = self.nf_recon[x_max_idx] - self.nf_recon[x_min_idx]
 
         fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
@@ -651,7 +666,8 @@ class fish():
         bottom_step = int(np.ceil((len(recon_offset) - x_max_idx)/n_steps))
         top_steps = np.s_[0:x_max_idx:top_step]
         bottom_steps = np.s_[x_max_idx:len(recon_offset):bottom_step]
-        
+        print('\ntop steps=', top_steps)
+        print('\nbottom steps=', bottom_steps)
         steps = np.r_[top_steps, bottom_steps]
         sector_pts = recon_offset[steps].astype(int) + self.nf_offset
         
@@ -659,7 +675,8 @@ class fish():
         self.sector_areas = []
         
         lines = [np.linspace(sector_pts[n], center_of_mass, 150) for n in range(len(steps))]
-                
+        self.line_lengths = [np.linalg.norm(line[-1]-line[0])*self.scale for line in lines]
+        
         for n in range(len(steps)):
             recon_sector_im = np.zeros_like(self.fish_mask_full)
             
@@ -671,9 +688,9 @@ class fish():
                 contour = np.concatenate([sector, lines[n],lines[n+1]])
                 
             seed = np.mean(contour,axis=0).astype(int)
-
+            width=3
             for idx in contour.astype(int):
-                recon_sector_im[idx[1]-2:idx[1]+2,idx[0]-2:idx[0]+2] = 255
+                recon_sector_im[idx[1]-width:idx[1]+width,idx[0]-width:idx[0]+width] = 255
 
             h, w = recon_sector_im.shape[:2]
             mask = np.zeros((h+2, w+2), np.uint8)
@@ -686,8 +703,9 @@ class fish():
                 sector_floodfill = sector_floodfill[::-1,:]
             
             kernel = np.ones((3, 3), np.uint8)
-            # self.filled_sectors.append(cv.dilate(sector_floodfill,kernel))
+            sector_floodfill = cv.erode(sector_floodfill,kernel,iterations=2)
             self.filled_sectors.append(sector_floodfill)
+            # self.filled_sectors.append(sector_floodfill)
             self.sector_areas.append(np.sum(sector_floodfill > 0)*(self.scale**2))
                  
     def get_fin_clips(self):
@@ -708,6 +726,13 @@ class fish():
         self.pelvic_mask = self.get_mask(self.pelvic_box)
         self.pectoral_mask = self.get_mask(self.pectoral_box)
     
+    def get_eye_diameter(self):
+        
+        eye_contour, _  = compute_contour(self.eye_mask[:,:,0], ord=self.ord)#3
+        l = len(eye_contour)
+        max_diameter = np.max([np.linalg.norm(eye_contour[i] - eye_contour[j]) for i in range(l) for j in range(l)])
+        self.eye_diameter=self.scale*max_diameter
+        
     def get_no_fin_area(self):
         
         no_fin_mask = self.no_fin_segmentation
@@ -776,7 +801,7 @@ class fish():
         eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
 
         self.no_fin_segmentation=cv.imread(nf_seg_path)[:,:,0] == 255   
-        self.full_segmentation=cv.imread(full_seg_path)   
+        self.full_segmentation=cv.imread(full_seg_path)*255   
         self.dorsal_mask=cv.imread(dorsal_seg_path)
         self.adipose_mask=cv.imread(adipose_seg_path)  
         self.caudal_mask=cv.imread(caudal_seg_path)  
@@ -802,12 +827,14 @@ class fish():
                 self.FL = None
                 self.area = None
                 self.sector_areas=[None]*(2*self.n_steps)
+                self.line_lengths=[None]*(2*self.n_steps)
             else: 
                 self.level_fish()
                 self.get_fin_clips()
                 self.get_full_segmentations()
                 self.get_no_fin_area()
-                self.filet_fish(n_steps=self.n_steps)
+                self.filet_fish(n_steps=self.n_steps,ord=self.ord)
+                self.get_eye_diameter()
             
     def re_run(self):
         
@@ -822,18 +849,29 @@ class fish():
         print('\nthawed\n')
         self.get_no_fin_area()
         print('get no fin area done\n')
-        self.filet_fish(n_steps=self.n_steps)
+        self.filet_fish(n_steps=self.n_steps,ord=self.ord)
         print('filet done\n')
+        self.get_eye_diameter()
+        print('eye diameter done\n')
         
 def main():
     # example:
     image_path = os.path.join('sushi','example_fish', '110524FishID14c.jpg')
+    # image_path = os.path.join('sushi','example_fish', '110524FishID7d.jpg')
+    image_path = os.path.join('sushi','CABA_Fish', 'DSCN2439.jpg')
+    image_path = os.path.join('sushi','CABA_Fish', '20250306_144920.jpg')
+
 
     sam = sam_model_registry['vit_l'](checkpoint="./sam_vit_l_0b3195.pth")
     predictor = SamPredictor(sam)   
     
     myFish = fish(image_path, predictor,write_masks=True)
     myFish.run()
+    
+    # nfs = myFish.no_fin_segmentation
+    # cnfs = convex_hull_image(nfs)
+    # plt.imshow(cnfs)
+    # plt.show()
 
     print('\n\ntotal non-fin sector area = ', np.sum(myFish.sector_areas,axis=0), '\n\n')
         
@@ -862,6 +900,7 @@ def main():
     axes[1,0].imshow(myFish.no_fin_segmentation[slice])
     axes[1,0].set_title('No Fin Segmentation')
 
+    print(myFish.line_lengths)
     # Adjust layout to prevent overlap
     plt.tight_layout()
     if save_figures:

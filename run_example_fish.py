@@ -21,6 +21,8 @@ def main():
     areas=[]
     no_fin_areas=[]
     sector_areas=[]
+    line_lengths=[]
+    eye_diameters=[]
     FLs=[]
     scales=[]
     qualities=[]
@@ -33,13 +35,15 @@ def main():
         school.append(fish)
         fish.write_full_masks()
         fish.write_fin_masks()
-        fish.filet_fish()
+        # fish.filet_fish()
         FLs.append(fish.FL)
         scales.append(fish.scale)
         areas.append(fish.area)
         qualities.append(fish.quality)
         no_fin_areas.append(fish.no_fin_area)
         sector_areas.append(fish.sector_areas)
+        line_lengths.append(fish.line_lengths)
+        eye_diameters.append(fish.eye_diameter)
         
     
     if save_xlsx:
@@ -48,8 +52,11 @@ def main():
         df["pred FL"] = FLs
         df["pred area"] = areas
         df["pred area (no fins)"] = no_fin_areas
+        df["eye_diameters"]=eye_diameters
         for i in range(len(fish.sector_areas)):
             df["Sector Area " + str(i)] = np.array(sector_areas)[:,i]
+            df["Sector Length " + str(i)] = np.array(line_lengths)[:,i]  
+            
         df.to_excel(os.path.join('measurements', dir_name,'output.xlsx'))
     
     
