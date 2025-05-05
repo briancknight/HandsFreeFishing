@@ -1,0 +1,104 @@
+[project]
+name = "HandsFreeFishing"
+version = "0.0.1"
+authors = [
+  { name="Brian Knight", email="bcknight@ucdavis.edu" },
+]
+description = "A package for processing and analyzing fish viewer data in the Johnson & Jeffres Lab in the Center for Watershed Sciences at UC Davis"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+  'numpy==1.24.4', 
+  'torch==2.2.2', 
+  'torchaudio==2.2.2', 
+  'torchvision==0.17.2', 
+  'contourpy==1.3.1', 
+  'cycler==0.12.1', 
+  'et_xmlfile==2.0.0', 
+  'filelock==3.17.0', 
+  'fonttools==4.56.0', 
+  'fsspec==2025.2.0', 
+  'Jinja2==3.1.5', 
+  'kiwisolver==1.4.8', 
+  'MarkupSafe==3.0.2', 
+  'matplotlib==3.10.0', 
+  'mpmath==1.3.0', 
+  'networkx==3.4.2', 
+  'opencv-python==4.11.0.86', 
+  'openpyxl==3.1.5', 
+  'packaging==24.2', 
+  'pandas==2.2.3', 
+  'pillow==11.1.0', 
+  'pyefd==1.6.0', 
+  'pyparsing==3.2.1', 
+  'python-dateutil==2.9.0.post0', 
+  'pytz==2025.1', 
+  'regex==2024.11.6', 
+  'scipy==1.15.1', 
+  'six==1.17.0', 
+  'sympy==1.13.3', 
+  'tifffile==2025.1.10', 
+  'typing_extensions==4.12.2', 
+  'tzdata==2025.1', 
+  'scikit-learn==1.6.1', 
+  'scikit-image==0.25.2',
+  'segment-anything @ git+https://github.com/facebookresearch/segment-anything.git',
+  ]
+
+license = {file = "LICENSE.md"}
+
+[project.urls]
+Homepage = "https://github.com/briancknight/HandsFreeFishing"
+Issues = "https://github.com/briancknight/HandsFreeFishing/issues"
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = [
+    'setuptools >= 77.0.3',
+    'numpy==1.24.4',
+    'torch==2.2.2',
+    'torchaudio==2.2.2',
+    'torchvision==0.17.2',
+    'contourpy==1.3.1',
+    'cycler==0.12.1',
+    'et_xmlfile==2.0.0',
+    'filelock==3.17.0',
+    'fonttools==4.56.0',
+    'fsspec==2025.2.0',
+    'Jinja2==3.1.5',
+    'kiwisolver==1.4.8',
+    'MarkupSafe==3.0.2',
+    'matplotlib==3.10.0',
+    'mpmath==1.3.0',
+    'networkx==3.4.2',
+    'opencv-python==4.11.0.86',
+    'openpyxl==3.1.5',
+    'packaging==24.2',
+    'pandas==2.2.3',
+    'pillow==11.1.0',
+    'pyefd==1.6.0',
+    'pyparsing==3.2.1',
+    'python-dateutil==2.9.0.post0',
+    'pytz==2025.1',
+    'regex==2024.11.6',
+    'scipy==1.15.1',
+    'six==1.17.0',
+    'sympy==1.13.3',
+    'tifffile==2025.1.10',
+    'typing_extensions==4.12.2',
+    'tzdata==2025.1',
+    'scikit-learn==1.6.1',
+    'scikit-image==0.25.2'
+]
+
+dependencies=[
+  'git+https://github.com/facebookresearch/segment-anything.git',
+]
+
+[tool.setuptools.package-data]
+"*" = ["*.tif"]
