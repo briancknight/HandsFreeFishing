@@ -12,11 +12,12 @@ is not included here.
 - in terminal navigate to the directory you'd like to place this project
 - run the following: 
     git clone https://github.com/briancknight/HandsFreeFishing.git
-- then inside the HandsFreeFishing directory:
+- navigate to the HandsFreeFishing directory
 - create a python virtual environment by running the command:
     python -m venv myvenv
 - activate your new virtual environment:
-    source myvenv/bin/activate
+    MAC OS: source myvenv/bin/activate
+    Windows 10: myvenv\Scripts\activate
 - install HandsFreeFishing via the pyproject.toml by running the command:
     pip install .
 - finally, visit https://github.com/facebookresearch/segment-anything, scroll down to the 'Model Checkpoints' section, and download the ViT-l SAM model. Move this to the HandsFreeFishing directory. *NOTE* this model is about 2.5 GB in size
