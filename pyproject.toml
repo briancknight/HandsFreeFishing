@@ -50,7 +50,7 @@ dependencies = [
   'segment-anything @ git+https://github.com/facebookresearch/segment-anything.git',
   ]
 
-license = {file = "LICENSE.md"}
+license = "MIT"
 
 [project.urls]
 Homepage = "https://github.com/briancknight/HandsFreeFishing"
@@ -100,5 +100,11 @@ dependencies=[
   'git+https://github.com/facebookresearch/segment-anything.git',
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]  # list of folders that contain the packages (["."] by default)
+include = ["HandsFreeFishing"]  # package names should match these glob patterns (["*"] by default)
+exclude = []  # exclude packages matching these glob patterns (empty by default)
+namespaces = false  # to disable scanning PEP 420 namespaces (true by default)
+
 [tool.setuptools.package-data]
-"*" = ["*.tif"]
+"*" = ["*.tif"] # include the templat.tif file
