@@ -7,10 +7,10 @@ from scipy.signal import find_peaks
 from scipy.spatial import ConvexHull
 import cv2 as cv
 from pyefd import elliptic_fourier_descriptors, calculate_dc_coefficients, plot_efd, reconstruct_contour
-from segment_anything import SamPredictor, sam_model_registry
 import pandas as pd
 import regex as re
 from skimage.morphology import convex_hull_image
+from ellipse import LsqEllipse
 
 # in order to read the template image
 from importlib.resources import files
@@ -66,7 +66,7 @@ def get_grid_scale(img,ds=2):
     w, h = template.shape[::-1]
     
     meth = 'TM_CCOEFF_NORMED'
-    sizes = np.linspace(0.25, 3, 50)
+    sizes = np.linspace(0.25, 4, 150)
     # sizes = [1, 1.1, 0.9, 1.2, 0.8, 1.3, 0.7, 1.4, 0.6, 1.5, 0.5]
     
     min_vals = []
@@ -108,11 +108,11 @@ def get_grid_scale(img,ds=2):
     best_idx = np.argmax(max_vals)
     
     res = ress[best_idx]
-    bottom_right = brs[best_idx]
-    top_left = tls[best_idx]
+    bottom_right = np.array(brs[best_idx])*ds
+    top_left = np.array(tls[best_idx])*ds
     max_loc = max_locs[best_idx]
     
-    scale = 0.5 * ((bottom_right[0] - top_left[0]) + (bottom_right[1] - top_left[1]))*ds
+    scale = 0.5 * ((bottom_right[0] - top_left[0]) + (bottom_right[1] - top_left[1]))
     
     return scale, top_left, bottom_right
 
@@ -229,9 +229,11 @@ class fish():
             write_masks=True
             with open(measurement_path, newline='') as csvfile:
                 reader=csv.reader(csvfile, delimiter=',')
-                for (j,row) in enumerate(reader):
-                    if j==0:
-                        crop_data = row
+                crop_data=next(reader)
+                # for (j,row) in enumerate(reader):
+                #     if j==0:
+                #         crop_data = row
+                #     break
 
             roi_str = crop_data[0][1:-1].split()
             roi = [int(roi_str[0]), int(roi_str[1]), int(roi_str[2]), int(roi_str[3])]
@@ -246,7 +248,7 @@ class fish():
         else:
             pass #input_measurements(self)
         
-    def get_scale(self,ds=8):
+    def get_scale(self,ds=1):
         # predict scale based on template matching with fixed grid image
         
         if self.frozen:
@@ -259,7 +261,7 @@ class fish():
             self.scale = float(scale_data[0])
             
         if self.scale is None:
-            self.scale, tl, br = get_grid_scale(self.image,ds=ds)
+            self.scale, self.grid_tl, self.grid_br = get_grid_scale(self.image,ds=ds)
 
             self.scale = 5/self.scale
             
@@ -325,9 +327,6 @@ class fish():
         fork_length_vector = self.recon[x_max_idx] - self.recon[x_min_idx]
         FL = np.linalg.norm(fork_length_vector) * self.scale
         self.area = np.sum(self.fish_mask)*(self.scale**2)
-        print('for: ', self.im_path)
-        print('fork length is: ', FL)
-        print('area is: ', self.area)
         # print('no fin area is: ', self.no_fin_area)
 
                 
@@ -355,6 +354,8 @@ class fish():
                 recon_imag_rot[idx[1],idx[0]]=1
 
         self.recon_offset_rotated, lm2_idx, lm16_idx = get_length_landmarks(self.recon_offset_rotated)
+        self.FL_points=(self.rot_mat[:2,:2].transpose()@(self.recon_offset_rotated[lm16_idx] - self.rot_mat[:,2]) + self.offset, 
+                        self.rot_mat[:2,:2].transpose()@(self.recon_offset_rotated[0] - self.rot_mat[:,2]) + self.offset)
 
         recon_imag_rot[self.recon_offset_rotated[0][1].astype(int)-5:self.recon_offset_rotated[0][1].astype(int)+5, self.recon_offset_rotated[0][0].astype(int)-5:self.recon_offset_rotated[0][0].astype(int)+5] = 2
         recon_imag_rot[self.recon_offset_rotated[lm16_idx][1].astype(int)-5:self.recon_offset_rotated[lm16_idx][1].astype(int)+5, self.recon_offset_rotated[lm16_idx][0].astype(int)-5:self.recon_offset_rotated[lm16_idx][0].astype(int)+5] = 2
@@ -362,6 +363,10 @@ class fish():
         fork_length_vector = self.recon_offset_rotated[lm16_idx] - self.recon_offset_rotated[0]
         self.FL = np.linalg.norm(fork_length_vector) * self.scale
 
+        print('for: ', self.im_path)
+        print('fork length is: ', self.FL)
+        print('area is: ', self.area)
+        
         with open(os.path.join('measurements', self.dir, self.im_name+'.csv'), 'a', newline='') as csvfile:
             writer=csv.writer(csvfile)
             writer.writerow([self.scale, self.FL, self.area])
@@ -608,6 +613,8 @@ class fish():
         for (i,mask) in enumerate(masks):
             
             # creating a rough label image
+            demask = (mask==0)
+            self.full_segmentation *= np.stack([demask, demask, demask], axis=-1)
             self.full_segmentation[:,:,1] +=  mask
             
             # if (i > 0 and i < 5): # don't zero out the eyeball, pelvic, or pectoral fins
@@ -617,6 +624,8 @@ class fish():
         # for additional contrast
         # self.full_segmentation = -50*(self.full_segmentation == 0) + self.full_segmentation
         self.no_fin_segmentation = cv.erode(self.no_fin_segmentation*1.0, np.ones((5,5), np.uint8), iterations=3) * 255
+        self.no_fin_segmentation = get_largest_connected_component(((self.no_fin_segmentation>0) * 255).astype(np.uint8)) * 255
+        # self.no_fin_segmentation = np.stack([self.no_fin_segmentation, self.no_fin_segmentation, self.no_fin_segmentation], axis=-1)
         
         self.full_segmentation = (self.full_segmentation>0) * 255
     
@@ -631,12 +640,12 @@ class fish():
             nf_mask = nf_mask[::-1,:]
         
         nf_mask_temp = convex_hull_image(nf_mask)
-        if np.sum(nf_mask_temp > 0)*(self.scale**2)/self.no_fin_area > 1.25:
+        eps=1e-4
+        if np.sum(nf_mask_temp > 0)*(self.scale**2)/(self.no_fin_area+eps) > 1.25:
             print('too much')
-            pass
         else:
             nf_mask = nf_mask_temp
-            
+        
         self.nf_recon, self.nf_box_bounds = compute_contour(nf_mask, ord=ord)#3
         self.nf_offset = np.array([self.nf_box_bounds[0], self.nf_box_bounds[1]])
 
@@ -712,7 +721,224 @@ class fish():
             self.filled_sectors.append(sector_floodfill)
             # self.filled_sectors.append(sector_floodfill)
             self.sector_areas.append(np.sum(sector_floodfill > 0)*(self.scale**2))
-                 
+        
+    def get_partitioned_surface_area(self,n_partitions=6, ord=50):
+    
+        nf_mask = self.no_fin_segmentation.copy()
+        if self.horiz_flip =='1':
+            print('flipped horizontally')
+            nf_mask = nf_mask[:,::-1]
+        if self.vertical_flip == '1':
+            print('flipped vertically')
+            nf_mask = nf_mask[::-1,:]
+        
+        nf_mask_temp = convex_hull_image(nf_mask)
+        eps=1e-4
+        if np.sum(nf_mask_temp > 0)*(self.scale**2)/(self.no_fin_area+eps) > 1.25:
+            print('too much')
+        else:
+            nf_mask = nf_mask_temp
+        
+        self.nf_recon, self.nf_box_bounds = compute_contour(nf_mask, ord=ord)#3
+        self.nf_offset = np.array([self.nf_box_bounds[0], self.nf_box_bounds[1]])
+
+        reg = LsqEllipse().fit(self.nf_recon)
+        center, self.major_axis, self.minor_axis, phi = reg.as_parameters()
+        self.major_axis *= self.scale
+        self.minor_axis *= self.scale
+                
+        x_min_idx = np.argmin(self.nf_recon[:,0])
+        x_max_idx = np.argmax(self.nf_recon[:,0])
+
+        recon_offset = self.nf_recon - self.nf_offset
+        
+        fork_length_vector = self.nf_recon[x_max_idx] - self.nf_recon[x_min_idx]
+
+        fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
+            
+        self.nf_fish_angle = np.arccos(np.dot(np.array([1,0]), fork_length_dir))*180/np.pi
+        
+        if fork_length_dir[1] < 0:
+            self.nf_fish_angle = -1 * self.nf_fish_angle
+            
+        self.nf_cp = 0.5*(recon_offset[x_min_idx] + recon_offset[x_max_idx]) # average
+        rot_mat = cv.getRotationMatrix2D(self.nf_cp, self.nf_fish_angle, 1.0)
+
+        recon_offset_rotated =  (rot_mat[:2,:2]@(recon_offset.transpose())).transpose() + rot_mat[:,2]
+
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        recon_offset_rotated = np.roll(recon_offset_rotated, -x_min_idx, axis=0)
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        
+        recon_offset = (rot_mat[:2,:2].transpose()@((recon_offset_rotated - rot_mat[:,2]).transpose())).transpose()
+        
+        top_step = int(np.ceil(x_max_idx/(n_partitions)))
+        bottom_step = int(np.ceil((len(recon_offset) - x_max_idx)/n_partitions))
+        top_steps = np.s_[0:x_max_idx:top_step]
+        bottom_steps = np.s_[x_max_idx:len(recon_offset):bottom_step]
+        
+        steps = np.r_[top_steps, bottom_steps]
+        sector_pts = recon_offset[steps].astype(int) + self.nf_offset
+        
+        self.filled_partitions=[]
+        self.partitioned_areas = []
+        
+        lines = [np.linspace(sector_pts[n], sector_pts[-n], 150) for n in range(1, n_partitions)]
+        self.partition_line_lengths = [np.linalg.norm(line[-1]-line[0])*self.scale for line in lines]
+        
+        for n in range(n_partitions):
+            recon_sector_im = np.zeros_like(self.fish_mask_full)
+            
+            if n == 0:
+                sector = np.concatenate([recon_offset[steps[-1]:], recon_offset[0:steps[1]]]) + self.nf_offset
+                contour = np.concatenate([sector, lines[0]])
+            elif n == n_partitions-1:
+                sector = recon_offset[steps[n_partitions-1]:steps[n_partitions+1]] + self.nf_offset
+                contour = np.concatenate([lines[-1], sector])
+            else:
+                sector1 = recon_offset[steps[n]:steps[n+1]] + self.nf_offset
+                sector2 = recon_offset[steps[-n-1]:steps[-n]] + self.nf_offset
+                contour = np.concatenate([lines[n-1], sector1, sector2, lines[n]])
+                
+            seed = np.mean(contour,axis=0).astype(int)
+            width=3
+            for idx in contour.astype(int):
+                recon_sector_im[idx[1]-width:idx[1]+width,idx[0]-width:idx[0]+width] = 255
+
+            h, w = recon_sector_im.shape[:2]
+            mask = np.zeros((h+2, w+2), np.uint8)
+            sector_floodfill = recon_sector_im.astype(np.uint8)
+            cv.floodFill(sector_floodfill, mask, seed,255)
+            
+            if self.horiz_flip =='1':
+                sector_floodfill = sector_floodfill[:,::-1]
+            if self.vertical_flip == '1':
+                sector_floodfill = sector_floodfill[::-1,:]
+            
+            kernel = np.ones((3, 3), np.uint8)
+            sector_floodfill = cv.erode(sector_floodfill,kernel,iterations=2)
+            self.filled_partitions.append(sector_floodfill)
+            # self.filled_sectors.append(sector_floodfill)
+            self.partitioned_areas.append(np.sum(sector_floodfill > 0)*(self.scale**2))
+        
+    def get_digitized_landmarks(self,n_steps=7, ord=100):
+    
+        nf_mask = self.no_fin_segmentation.copy()
+        eye_mask = self.eye_mask.copy()
+        if self.horiz_flip =='1':
+            print('flipped horizontally')
+            nf_mask = nf_mask[:,::-1]
+            eye_mask = eye_mask[:,::-1]
+        if self.vertical_flip == '1':
+            print('flipped vertically')
+            nf_mask = nf_mask[::-1,:]
+            eye_mask=eye_mask[::-1,:]
+        
+        nf_mask_temp = convex_hull_image(nf_mask)
+        eps=1e-4
+        if np.sum(nf_mask_temp > 0)*(self.scale**2)/(self.no_fin_area+eps) > 1.25:
+            print('too much')
+        else:
+            nf_mask = nf_mask_temp
+        
+        nf_recon, nf_box_bounds = compute_contour(nf_mask, ord=ord)#3
+        eye_contour,_ = compute_contour(eye_mask, ord=ord)
+        nf_offset = np.array([nf_box_bounds[0], nf_box_bounds[1]])
+
+        x_min_idx = np.argmin(nf_recon[:,0])
+        x_max_idx = np.argmax(nf_recon[:,0])
+
+        recon_offset = nf_recon - nf_offset
+        eye_contour_offset = eye_contour - nf_offset
+        fork_length_vector = nf_recon[x_max_idx] - nf_recon[x_min_idx]
+
+        fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
+            
+        nf_fish_angle = np.arccos(np.dot(np.array([1,0]), fork_length_dir))*180/np.pi
+        
+        if fork_length_dir[1] < 0:
+            nf_fish_angle = -1 * nf_fish_angle
+            
+        nf_cp = 0.5*(recon_offset[x_min_idx] + recon_offset[x_max_idx]) # average
+        rot_mat = cv.getRotationMatrix2D(nf_cp, nf_fish_angle, 1.0)
+
+        recon_offset_rotated =  (rot_mat[:2,:2]@(recon_offset.transpose())).transpose() + rot_mat[:,2]
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        recon_offset_rotated = np.roll(recon_offset_rotated, -x_min_idx, axis=0)
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        
+        # rotate the eye contour by the same transformation
+        eye_contour_rotated = (rot_mat[:2,:2]@(eye_contour_offset.transpose())).transpose() + rot_mat[:,2]
+        x_max_idx_eye = np.argmax(eye_contour_rotated[:,0])
+        
+        # redefine recon_offset by unrotated shifted recon_offset_rotated, now with idx 0 corresponding to the minimum x index
+        recon_offset = (rot_mat[:2,:2].transpose()@((recon_offset_rotated - rot_mat[:,2]).transpose())).transpose()
+        # center_of_mass = np.mean(recon_offset, axis=0) + self.nf_offset
+        
+        top_step = int(np.ceil(x_max_idx/(n_steps)))
+        bottom_step = int(np.ceil((len(recon_offset) - x_max_idx)/n_steps))
+        top_steps = np.s_[0:x_max_idx:top_step]
+        bottom_steps = np.s_[x_max_idx:len(recon_offset):bottom_step]
+        
+        steps = np.r_[top_steps, bottom_steps]
+        sector_pts = recon_offset[steps].astype(int) + nf_offset
+        eye_pt = eye_contour[x_max_idx_eye].astype(int)
+        
+        truss_pairs = [(0,1), (0,2), (0,-1), (0,-2), (0, 7), (0, 'eye'),
+                 (1, 2),(1, 'eye'), (1, -1), (1, -2),
+                 (2,3), (2,-1), (2,-2), (2,-3),
+                 (3,4), (3,-2),(3,-3),(3,-4),
+                 (4,5), (4, -3), (4, -4),
+                 (5,6), (5,-4), (5,-5),(5, -6), 
+                 (6,7), (6, -5), (6,-6),
+                 (7,-6),
+                 (-6, -5), 
+                 (-5,-4),
+                 (-4,-3),
+                 (-3,-2),
+                 (-2,-1)
+                 ]
+        # idxs = [6, 5, 8, 12, 13, 14, ]
+        best_truss_pairs = [(0,'eye'), (0, 7), 
+                      (1, 'eye'),
+                      (2, -1), (2,-2),(2,-3),
+                      (3,-2),(3,-4),
+                      (4,5), (4,-3), (4,-4), 
+                      (5, -6),
+                      (6,7), (6, -5), 
+                      (7,-6),
+                      (-5,-4)
+                      ]
+        self.truss_points=[sector_pts[i] for i in range(len(sector_pts))]
+        self.truss_points.append(eye_pt)
+        
+        self.truss_lengths = []
+        self.best_truss_lengths = []
+        self.truss_start_end_pts = []
+
+        
+        for (i,pair) in enumerate(truss_pairs):
+            idx1 = pair[0]
+            idx2 = pair[1]
+            if type(idx2)==int:
+                self.truss_start_end_pts.append([sector_pts[-idx1], sector_pts[-idx2]])
+                self.truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - sector_pts[-idx2]))
+            else:
+                if idx2=='eye':
+                    self.truss_start_end_pts.append([sector_pts[-idx1], eye_pt])
+                    self.truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - eye_pt))
+            
+            if pair in best_truss_pairs:
+                if type(idx2)==int:
+                    self.best_truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - sector_pts[-idx2]))
+                else:
+                    if idx2=='eye':
+                        self.best_truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - eye_pt))
+                
     def get_fin_clips(self):
         
         self.get_eye_box(1/20)    
@@ -733,21 +959,49 @@ class fish():
     
     def get_eye_diameter(self):
         
-        eye_contour, _  = compute_contour(self.eye_mask, ord=self.ord)#3
-        l = len(eye_contour)
-        max_diameter = np.max([np.linalg.norm(eye_contour[i] - eye_contour[j]) for i in range(l) for j in range(l)])
+        self.eye_contour, _  = compute_contour(self.eye_mask, ord=self.ord)#3
+        l = len(self.eye_contour)
+        max_diameter = np.max([np.linalg.norm(self.eye_contour[i] - self.eye_contour[j]) for i in range(l) for j in range(l)])
+        
         self.eye_diameter=self.scale*max_diameter
         
-    def get_no_fin_area(self):
+    def get_no_fin_area(self, convex_hull_correction=True):
         
-        no_fin_mask = self.no_fin_segmentation
+        no_fin_mask = self.no_fin_segmentation.copy()
+        box_slice = np.s_[self.box_bounds[1]:self.box_bounds[3], self.box_bounds[0]:self.box_bounds[2]]
+        
         if self.horiz_flip=="1":
             no_fin_mask = no_fin_mask[:,::-1]
         if self.vertical_flip=="1":
             no_fin_mask = no_fin_mask[::-1, :]
-        box_slice = np.s_[self.box_bounds[1]:self.box_bounds[3], self.box_bounds[0]:self.box_bounds[2]]
         
         self.no_fin_area = np.sum(no_fin_mask[box_slice]>0) * self.scale**2
+        print(self.no_fin_area)
+        eps=1e-3
+        
+        if convex_hull_correction:
+            no_fin_mask_temp = convex_hull_image(no_fin_mask.copy())
+            no_fin_area_temp = np.sum(no_fin_mask_temp > 0)*(self.scale**2)
+            print(no_fin_area_temp/self.no_fin_area)
+            
+            if no_fin_area_temp/(self.no_fin_area+eps) > 1.2:
+                write_ch=False
+                print('too much')
+            else:
+                write_ch=True
+                no_fin_mask = no_fin_mask_temp
+                
+                if self.horiz_flip=="1":
+                    no_fin_mask = no_fin_mask[:,::-1]
+                if self.vertical_flip=="1":
+                    no_fin_mask = no_fin_mask[::-1, :]
+            
+                self.no_fin_area = no_fin_area_temp
+        
+        print(self.no_fin_area)
+        if write_ch:
+            print('writing convex hull, in theory')
+            self.write_mask(no_fin_mask, name='convex_hull')
 
     def write_fin_masks(self):
             
@@ -844,7 +1098,7 @@ class fish():
     def re_run(self):
         
         self.get_measurements()
-        self.get_scale(ds=2)
+        self.get_scale(ds=1)
         self.segment_fish()
         self.level_fish()
         print('level fish done\n')
@@ -853,6 +1107,7 @@ class fish():
         self.thaw()
         print('\nthawed\n')
         self.get_no_fin_area()
+        print(self.no_fin_area)
         print('get no fin area done\n')
         self.filet_fish(n_steps=self.n_steps,ord=self.ord)
         print('filet done\n')
@@ -860,6 +1115,7 @@ class fish():
         print('eye diameter done\n')
         
 def main():
+    from segment_anything import SamPredictor, sam_model_registry
     # example:
     image_path = os.path.join('sushi','example_fish', '110524FishID6c.jpg')
 
@@ -915,6 +1171,11 @@ def main():
 
     # Show the plot
     plt.show()
+    
+    def create_figure(myFish):
+        box = myFish.prediction_box
+        slice = np.s_[box[1]:box[3], box[0]:box[2]]
+    pass
     
 if __name__ == '__main__':
     main()

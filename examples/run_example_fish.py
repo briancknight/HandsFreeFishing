@@ -60,8 +60,7 @@ def main():
             df["Sector Length " + str(i)] = np.array(line_lengths)[:,i]  
             
         df.to_excel(os.path.join('measurements', dir_name,'output.xlsx'))
-    
-    
+
 if __name__ == "__main__":
     main()
 

@@ -17,7 +17,9 @@ def main():
     im_paths = [os.path.join(full_dir, id + ".jpg") for id in im_names]
     
     # read in Meta's Segment Anything Model (SAM)
+    print('reading sam...')
     sam = sam_model_registry['vit_l'](checkpoint=model_path)
+    print('sam read')
     predictor = SamPredictor(sam) 
     school=[]
     areas=[]
@@ -25,6 +27,7 @@ def main():
     sector_areas=[]
     line_lengths=[]
     eye_diameters=[]
+    landmark_lengths=[]
     FLs=[]
     scales=[]
     qualities=[]
@@ -47,6 +50,15 @@ def main():
         line_lengths.append(fish.line_lengths)
         eye_diameters.append(fish.eye_diameter)
         
+        # landmark lengths
+        fish.get_digitized_landmarks(n_steps=7)
+        landmark_lengths.append(np.array(fish.best_truss_lengths)*fish.scale)
+        
+        if im_path==im_paths[0]:
+            # create nice figure
+            pass
+        
+    landmark_lengths = np.array(landmark_lengths)
     
     if save_xlsx:
         df["quality"] = qualities
@@ -58,7 +70,8 @@ def main():
         for i in range(len(fish.sector_areas)):
             df["Sector Area " + str(i)] = np.array(sector_areas)[:,i]
             df["Sector Length " + str(i)] = np.array(line_lengths)[:,i]  
-            
+        for i in range(len(landmark_lengths[0])):
+            df["Landmark Length " + str(i)] = landmark_lengths[:, i]
         df.to_excel(os.path.join('measurements', dir_name,'output_small.xlsx'))
     
     

@@ -17,8 +17,15 @@ def main():
     no_fin_areas=np.array(df['pred area (no fins)'])
     
     densities1 = weights/no_fin_areas
-    densities2 = weights/areas
+    density1_mean = np.mean(densities1)
+    density1_std = np.std(densities1)
+    print('no fin density avg = ' , density1_mean, 'with std ', density1_std)
     
+    densities2 = weights/areas
+    density2_mean = np.mean(densities2)
+    density2_std = np.std(densities2)
+    print('with fin density avg = ' , density2_mean, 'with std ', density2_std)
+
     with_no_fin_area = True
     with_fin_area = False
     
@@ -152,6 +159,119 @@ def main():
         
         # Show the plot
         plt.show()
+  
+def no_testing_data():
+    dir = os.path.join('measurements','example_fish')
+    df = pd.read_excel(os.path.join(dir,'output.xlsx'),sheet_name=0)
+    
+    save_figures=True
+    
+    weights = np.array(df['Weight(g)'])
+    scales=np.array(df['pred scale'])
+    areas=np.array(df['pred area'])
+    no_fin_areas=np.array(df['pred area (no fins)'])
+    
+    densities1 = weights/no_fin_areas
+    density1_mean = np.mean(densities1)
+    density1_std = np.std(densities1)
+    print('no fin density avg = ' , density1_mean, 'with std ', density1_std)
+    
+    densities2 = weights/areas
+    density2_mean = np.mean(densities2)
+    density2_std = np.std(densities2)
+    print('with fin density avg = ' , density2_mean, 'with std ', density2_std)
+
+    with_no_fin_area = True
+    with_fin_area = False
+    
+    if with_no_fin_area:
+        slope, intercept, r, p, se = linregress(no_fin_areas, weights)
+
+        print('slope of linear regression yields density estimate: ', slope, ' grams per pixel')
+        print('r val = ', r)
+        print('p val = ', p)
+        print('se val = ', se)
+        print('intercept = ', intercept)
         
+        # TRAINING: 
+        
+        pred_weights = no_fin_areas * slope + intercept
+        
+        print('ground truth weights: \n', weights, '\n\n')
+        print('predicted weights: \n', np.round(pred_weights,2), '\n\n')
+        
+        train_errors = np.abs(pred_weights - weights)
+        train_mae = np.mean(train_errors)
+        train_mape = train_mae/np.mean(weights)*100.0
+        
+        print('mean error (training) ', train_mae, '\n')   
+        print('mean percentage error (training) ', train_mape)
+        
+        
+        fig, ax=plt.subplots()
+        ax.scatter(no_fin_areas, weights)
+        # ax.scatter(no_fin_areas[1::2], weights[1::2],color='red')
+        ax.plot(range(0,500), slope * range(0,500) + intercept, linestyle='-', color='black')
+        ax.legend(['training', 'regression line'])
+        ax.set_ylabel('Weight (g)')
+        ax.set_xlabel('(No Fin) Segmentation Area')
+        ax.set_title('r^2 = ' + str(np.round(r**2,2)) + 
+                    ', MAE (train) =  ' + str(np.round(train_mae,3)) + ', ' + str(np.round(train_mape,2)) + '%')
+
+        # Adjust layout to prevent overlap
+        plt.tight_layout()
+        if save_figures:
+            plt.savefig('no_fin_segmentation_area_regression_no_test.eps', dpi=200)
+            plt.savefig('no_fin_segmentation_area_regression_no_test.png', dpi=200)
+        # Show the plot
+        plt.show()
+    
+    if with_fin_area:
+        # REPEAT INCLUDING FIN DATA
+        slope, intercept, r, p, se = linregress(areas, weights)
+
+        print('slope of linear regression yields density estimate: ', slope, ' grams per pixel')
+        print('r val = ', r)
+        print('p val = ', p)
+        print('se val = ', se)
+        print('intercept = ', intercept)
+        
+        # TRAINING: 
+        
+        pred_weights = areas * slope + intercept
+        
+        print('ground truth weights: \n', weights, '\n\n')
+        print('predicted weights: \n', np.round(pred_weights,2), '\n\n')
+        
+        train_errors = np.abs(pred_weights - weights)
+        train_mae = np.mean(train_errors)
+        train_mape = train_mae/np.mean(weights)*100.0
+        
+        print('mean error (training) ', train_mae, '\n')   
+        print('mean percentage error (training) ', train_mape)
+        
+   
+        
+        fig, ax=plt.subplots()
+        ax.scatter(areas, weights)
+        ax.plot(range(0,600), slope * range(0,600) + intercept, linestyle='-', color='black')
+        ax.legend(['training','regression line'])
+        ax.set_ylabel('Weight (g)')
+        ax.set_xlabel('Segmentation Area')
+        ax.set_title('r^2 = ' + str(np.round(r**2,2)) + 
+                    ', MAE (train) =  ' + str(np.round(train_mae,3)) + ', ' + str(np.round(train_mape,2)) + '%')
+        # ax.scatter(areas, weights)
+        # plt.plot(np.linspace(0,))
+
+        # Adjust layout to prevent overlap
+        plt.tight_layout()
+        
+        if save_figures:
+            plt.savefig('segmentation_area_regression_no_test.eps', dpi=200)
+            plt.savefig('segmentation_area_regression_no_test.png', dpi=200)
+        
+        # Show the plot
+        plt.show()
+              
 if __name__ == "__main__":
-    main()
+    no_testing_data()
