@@ -186,7 +186,7 @@ def rotate_image(image, angle, center_point=None):
 # fish class, segments fish, fins, eyeball & computes a FL & (predicted) non-fin area
 class fish():
     
-    def __init__(self, image_path, predictor, write_masks = True, mask_ext = '.png', scale=None, num_fish=None):
+    def __init__(self, image_path, predictor, write_masks = True, mask_ext = '.png', scale=None, num_fish=None, n_steps = 2, n_partitions=5, ord=100, verbose=False):
         
         self.im_path = image_path
         image_path_split = os.path.split(self.im_path)
@@ -196,8 +196,9 @@ class fish():
         self.predictor = predictor
         self.scale=scale
         self.write_masks = write_masks
-        self.n_steps=2
-        self.ord=100
+        self.n_steps=n_steps
+        self.ord=ord
+        self.n_partitions=n_partitions
             
         # for images with multiple fish
         if num_fish is None:
@@ -216,7 +217,10 @@ class fish():
             pass
         else:
             os.makedirs(os.path.join('segmentations',self.dir),exist_ok=True)
-            
+        
+        # determines whether to allow or suppress certain print statements
+        self.verbose = verbose
+        
     def input_measurements(self):
         # TODO
         pass
@@ -283,11 +287,13 @@ class fish():
                 
         # flip as needed:
         if self.horiz_flip =='1':
-            print('flipped horizontally')
+            if self.verbose:
+                print('flipped horizontally')
             self.fish_mask=self.fish_mask[:,::-1]
             self.copy = self.copy[:, ::-1]
         if self.vertical_flip == '1':
-            print('flipped vertically')
+            if self.verbose:
+                print('flipped vertically')
             self.fish_mask=self.fish_mask[::-1,:]
             self.copy = self.copy[::-1, :]
             
@@ -301,8 +307,8 @@ class fish():
         self.offset = np.array([self.box_bounds[0], self.box_bounds[1]])
         
         # check to see if the segmentation is degenerate
-        print('max dimension size (mm): ', np.max(self.fish_mask.shape)*self.scale)
-        print(np.max(self.fish_mask.shape))
+        if self.verbose:
+            print('max dimension size (mm): ', np.max(self.fish_mask.shape)*self.scale)
         if np.max(self.fish_mask.shape)*self.scale < 8:
             self.degenerate=True
             cv.imwrite(os.path.join('segmentations',self.dir,'degenerate_' + self.im_name + '.png'), self.fish_mask_full*255)
@@ -327,8 +333,6 @@ class fish():
         fork_length_vector = self.recon[x_max_idx] - self.recon[x_min_idx]
         FL = np.linalg.norm(fork_length_vector) * self.scale
         self.area = np.sum(self.fish_mask)*(self.scale**2)
-        # print('no fin area is: ', self.no_fin_area)
-
                 
         fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
             
@@ -363,10 +367,10 @@ class fish():
         fork_length_vector = self.recon_offset_rotated[lm16_idx] - self.recon_offset_rotated[0]
         self.FL = np.linalg.norm(fork_length_vector) * self.scale
 
-        print('for: ', self.im_path)
-        print('fork length is: ', self.FL)
-        print('area is: ', self.area)
-        
+        if self.verbose:
+            print('fork length is: ', self.FL)
+            print('area is: ', self.area)
+            
         with open(os.path.join('measurements', self.dir, self.im_name+'.csv'), 'a', newline='') as csvfile:
             writer=csv.writer(csvfile)
             writer.writerow([self.scale, self.FL, self.area])
@@ -621,11 +625,8 @@ class fish():
             if (i > 0): # don't zero out the eyeball
                 self.no_fin_segmentation = self.no_fin_segmentation * (mask ==0)
                 
-        # for additional contrast
-        # self.full_segmentation = -50*(self.full_segmentation == 0) + self.full_segmentation
         self.no_fin_segmentation = cv.erode(self.no_fin_segmentation*1.0, np.ones((5,5), np.uint8), iterations=3) * 255
         self.no_fin_segmentation = get_largest_connected_component(((self.no_fin_segmentation>0) * 255).astype(np.uint8)) * 255
-        # self.no_fin_segmentation = np.stack([self.no_fin_segmentation, self.no_fin_segmentation, self.no_fin_segmentation], axis=-1)
         
         self.full_segmentation = (self.full_segmentation>0) * 255
     
@@ -633,16 +634,19 @@ class fish():
     
         nf_mask = self.no_fin_segmentation.copy()
         if self.horiz_flip =='1':
-            print('flipped horizontally')
+            if self.verbose:
+                print('flipped horizontally')
             nf_mask = nf_mask[:,::-1]
         if self.vertical_flip == '1':
-            print('flipped vertically')
+            if self.verbose:
+                print('flipped vertically')
             nf_mask = nf_mask[::-1,:]
         
         nf_mask_temp = convex_hull_image(nf_mask)
         eps=1e-4
         if np.sum(nf_mask_temp > 0)*(self.scale**2)/(self.no_fin_area+eps) > 1.25:
-            print('too much')
+            if self.verbose:
+                print('convex hull not used')
         else:
             nf_mask = nf_mask_temp
         
@@ -726,16 +730,19 @@ class fish():
     
         nf_mask = self.no_fin_segmentation.copy()
         if self.horiz_flip =='1':
-            print('flipped horizontally')
+            if self.verbose:
+                print('flipped horizontally')
             nf_mask = nf_mask[:,::-1]
         if self.vertical_flip == '1':
-            print('flipped vertically')
+            if self.verbose:
+                print('flipped vertically')
             nf_mask = nf_mask[::-1,:]
         
         nf_mask_temp = convex_hull_image(nf_mask)
         eps=1e-4
         if np.sum(nf_mask_temp > 0)*(self.scale**2)/(self.no_fin_area+eps) > 1.25:
-            print('too much')
+            if self.verbose:
+                print('convex hull not used')
         else:
             nf_mask = nf_mask_temp
         
@@ -743,9 +750,16 @@ class fish():
         self.nf_offset = np.array([self.nf_box_bounds[0], self.nf_box_bounds[1]])
 
         reg = LsqEllipse().fit(self.nf_recon)
-        center, self.major_axis, self.minor_axis, phi = reg.as_parameters()
-        self.major_axis *= self.scale
-        self.minor_axis *= self.scale
+        center, width, height, phi = reg.as_parameters()
+        width *= self.scale
+        height *= self.scale
+        
+        if width < height:
+            self.minor_axis = width
+            self.major_axis = height
+        else:
+            self.minor_axis = height
+            self.major_axis = width
                 
         x_min_idx = np.argmin(self.nf_recon[:,0])
         x_max_idx = np.argmax(self.nf_recon[:,0])
@@ -828,18 +842,19 @@ class fish():
         nf_mask = self.no_fin_segmentation.copy()
         eye_mask = self.eye_mask.copy()
         if self.horiz_flip =='1':
-            print('flipped horizontally')
+            # print('flipped horizontally')
             nf_mask = nf_mask[:,::-1]
             eye_mask = eye_mask[:,::-1]
         if self.vertical_flip == '1':
-            print('flipped vertically')
+            # print('flipped vertically')
             nf_mask = nf_mask[::-1,:]
             eye_mask=eye_mask[::-1,:]
         
         nf_mask_temp = convex_hull_image(nf_mask)
         eps=1e-4
         if np.sum(nf_mask_temp > 0)*(self.scale**2)/(self.no_fin_area+eps) > 1.25:
-            print('too much')
+            if self.verbose:
+                print('convex hull not used')
         else:
             nf_mask = nf_mask_temp
         
@@ -976,17 +991,18 @@ class fish():
             no_fin_mask = no_fin_mask[::-1, :]
         
         self.no_fin_area = np.sum(no_fin_mask[box_slice]>0) * self.scale**2
-        print(self.no_fin_area)
+        
         eps=1e-3
         
         if convex_hull_correction:
             no_fin_mask_temp = convex_hull_image(no_fin_mask.copy())
             no_fin_area_temp = np.sum(no_fin_mask_temp > 0)*(self.scale**2)
-            print(no_fin_area_temp/self.no_fin_area)
             
             if no_fin_area_temp/(self.no_fin_area+eps) > 1.2:
                 write_ch=False
-                print('too much')
+                if self.verbose:
+                    print('convex hull not used')
+                self.no_fin_convex_hull_mask = None
             else:
                 write_ch=True
                 no_fin_mask = no_fin_mask_temp
@@ -995,13 +1011,15 @@ class fish():
                     no_fin_mask = no_fin_mask[:,::-1]
                 if self.vertical_flip=="1":
                     no_fin_mask = no_fin_mask[::-1, :]
-            
+
                 self.no_fin_area = no_fin_area_temp
+                self.no_fin_convex_hull_mask = no_fin_mask
         
-        print(self.no_fin_area)
         if write_ch:
-            print('writing convex hull, in theory')
             self.write_mask(no_fin_mask, name='convex_hull')
+            
+            if self.verbose:
+                print('convex hull mask saved')
 
     def write_fin_masks(self):
             
@@ -1029,6 +1047,13 @@ class fish():
     
     def check_freezer(self):
         self.frozen=False
+        measurement_path = os.path.join('measurements', self.dir, self.im_name + '.csv')
+        if os.path.exists(measurement_path):
+            pass
+        else:
+            raise Exception('Preprocessing data is unavailable, please run the preprocessing script first.')
+        
+        initial_seg_path = os.path.join('segmentations', self.dir, 'initial_mask_' + self.im_name + self.mask_ext)
         nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_mask_' + self.im_name + self.mask_ext)
         full_seg_path = os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext)
         dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_mask_' + self.im_name + self.mask_ext)
@@ -1039,16 +1064,18 @@ class fish():
         pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_mask_' + self.im_name + self.mask_ext)
         eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
         
-        all_paths = [nf_seg_path, full_seg_path, dorsal_seg_path, adipose_seg_path, 
+        all_seg_paths = [nf_seg_path, full_seg_path, dorsal_seg_path, adipose_seg_path, 
                      caudal_seg_path, anal_seg_path, pelvic_seg_path, pectoral_seg_path, 
                      eye_seg_path]
         
-        if np.all([os.path.exists(path) for path in all_paths]):
+        if np.all([os.path.exists(path) for path in all_seg_paths]):
             self.frozen=True
-
-        print('frozen? ', self.frozen)
+        
+        print('frozen fish: ', self.frozen)
         
     def thaw(self):
+
+        initial_seg_path = os.path.join('segmentations', self.dir, 'initial_mask_' + self.im_name + self.mask_ext)
         nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_mask_' + self.im_name + self.mask_ext)
         full_seg_path = os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext)
         dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_mask_' + self.im_name + self.mask_ext)
@@ -1059,6 +1086,7 @@ class fish():
         pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_mask_' + self.im_name + self.mask_ext)
         eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
 
+        self.fish_mask = cv.imread(initial_seg_path, cv.IMREAD_GRAYSCALE)*255
         self.no_fin_segmentation=cv.imread(nf_seg_path,cv.IMREAD_GRAYSCALE)*255   
         self.full_segmentation=cv.imread(full_seg_path)*255   
         self.dorsal_mask=cv.imread(dorsal_seg_path,cv.IMREAD_GRAYSCALE)*255
@@ -1070,6 +1098,9 @@ class fish():
         self.eye_mask=cv.imread(eye_seg_path,cv.  IMREAD_GRAYSCALE)*255
         
     def run(self):
+        
+        print('\nfor: ', self.im_path)
+        
         self.check_freezer()
             
         if self.frozen:
@@ -1087,12 +1118,15 @@ class fish():
                 self.area = None
                 self.sector_areas=[None]*(2*self.n_steps)
                 self.line_lengths=[None]*(2*self.n_steps)
+                self.major_axis = None
+                self.minor_axis = None
             else: 
                 self.level_fish()
                 self.get_fin_clips()
                 self.get_full_segmentations()
                 self.get_no_fin_area()
                 self.filet_fish(n_steps=self.n_steps,ord=self.ord)
+                self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
                 self.get_eye_diameter()
             
     def re_run(self):
@@ -1101,18 +1135,29 @@ class fish():
         self.get_scale(ds=1)
         self.segment_fish()
         self.level_fish()
-        print('level fish done\n')
+        if self.verbose:
+            print('level fish done\n')
         # self.get_fin_clips()
-        print('\nthawing...\n')
+        print('\nthawing...')
         self.thaw()
-        print('\nthawed\n')
+        print('thawed\n')
+        
         self.get_no_fin_area()
-        print(self.no_fin_area)
-        print('get no fin area done\n')
+        
+        if self.verbose:
+            print('get no fin area done\n')
         self.filet_fish(n_steps=self.n_steps,ord=self.ord)
-        print('filet done\n')
+        
+        if self.verbose:
+            print('filet done\n')
+        self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
+        
+        if self.verbose:
+            print('partition done\n')
         self.get_eye_diameter()
-        print('eye diameter done\n')
+        
+        if self.verbose:
+            print('eye diameter done\n')
         
 def main():
     from segment_anything import SamPredictor, sam_model_registry
@@ -1127,15 +1172,9 @@ def main():
     myFish.run()
     myFish.write_full_masks()
     myFish.write_fin_masks()
-    
-    # nfs = myFish.no_fin_segmentation
-    # cnfs = convex_hull_image(nfs)
-    # plt.imshow(cnfs)
-    # plt.show()
 
-    print('\n\ntotal non-fin sector area = ', np.sum(myFish.sector_areas,axis=0))
-    print('total area = ', myFish.area)
-    print('total non-fin area = ', myFish.no_fin_area)
+    print('area = ', myFish.area)
+    print('area after fin clipping= ', myFish.no_fin_area)
     print('\npredicted fork length = ', myFish.FL)
     print('predicted eye diameter = ', myFish.eye_diameter, '\n\n')
     box = myFish.prediction_box
