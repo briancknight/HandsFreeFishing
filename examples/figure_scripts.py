@@ -158,7 +158,7 @@ def save_example_figures(myfish, im_name, figure_path = 'figures'):
         cv.imwrite(os.path.join(figure_path, im_name + '_FL_image.png'), cv.cvtColor(bg_black_to_white(FL_image[slice]).astype(np.uint8), cv.COLOR_BGR2RGB))
 
         # eye diameter visual
-        cropped_mask_initial = 255 * (myfish.fish_mask > 0)
+        cropped_mask_initial = 255 * (myfish.initial_fish_mask > 0)
         cropped_mask_initial_stacked = np.stack([cropped_mask_initial, cropped_mask_initial, cropped_mask_initial], axis=-1)
         cropped_masked_initial_black = myfish.image[slice] * (cropped_mask_initial_stacked[slice])
         

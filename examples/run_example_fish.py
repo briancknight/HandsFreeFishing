@@ -14,12 +14,12 @@ with open(os.path.join('..','weight_prediction_092025.pkl'), 'rb') as file:
     
 def main():
     dir_name = "example_fish"
-    full_dir = os.path.join("sushi", dir_name)
+    raw_data_dir = os.path.join("sushi", dir_name)
     excel_dir = 'spreadsheets'
     df = pd.read_excel(os.path.join(excel_dir, dir_name+'.xlsx'),sheet_name=0)
     
     im_names = df["FIshID"]
-    im_paths = [os.path.join(full_dir, id + ".jpg") for id in im_names]
+    im_paths = [os.path.join(raw_data_dir, id + ".jpg") for id in im_names]
     
     # read in Meta's Segment Anything Model (SAM)
     sam = sam_model_registry['vit_l'](checkpoint=model_path)

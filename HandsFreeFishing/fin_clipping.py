@@ -273,7 +273,7 @@ class fish():
         
         fish_mask_path = os.path.join('segmentations', self.dir, 'initial_mask_' + self.im_name + self.mask_ext)
         
-        if os.path.exists(fish_mask_path):
+        if self.frozen:
             print('using existing segmentation at: ', fish_mask_path)
             self.fish_mask = cv.imread(fish_mask_path)[:,:,0] == 255
         else:
@@ -281,6 +281,8 @@ class fish():
             fish_masks,q,o = self.predictor.predict(box=self.prediction_box, multimask_output=True)
             idx=np.argmax(q)
             self.fish_mask = fish_masks[idx]
+        
+        self.initial_fish_mask = np.copy(self.fish_mask)
         
         self.fish_mask =  get_largest_connected_component((self.fish_mask*255).astype(np.uint8))*255
         self.fish_mask_full = np.copy(self.fish_mask)
@@ -628,7 +630,7 @@ class fish():
         self.no_fin_segmentation = cv.erode(self.no_fin_segmentation*1.0, np.ones((5,5), np.uint8), iterations=3) * 255
         self.no_fin_segmentation = get_largest_connected_component(((self.no_fin_segmentation>0) * 255).astype(np.uint8)) * 255
         
-        self.full_segmentation = (self.full_segmentation>0) * 255
+        # self.full_segmentation = (self.full_segmentation>0) * 255
     
     def filet_fish(self,n_steps=6, ord=10):
     
@@ -1064,7 +1066,7 @@ class fish():
         pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_mask_' + self.im_name + self.mask_ext)
         eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
         
-        all_seg_paths = [nf_seg_path, full_seg_path, dorsal_seg_path, adipose_seg_path, 
+        all_seg_paths = [initial_seg_path, nf_seg_path, full_seg_path, dorsal_seg_path, adipose_seg_path, 
                      caudal_seg_path, anal_seg_path, pelvic_seg_path, pectoral_seg_path, 
                      eye_seg_path]
         
@@ -1086,7 +1088,7 @@ class fish():
         pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_mask_' + self.im_name + self.mask_ext)
         eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
 
-        self.fish_mask = cv.imread(initial_seg_path, cv.IMREAD_GRAYSCALE)*255
+        self.initial_fish_mask = cv.imread(initial_seg_path, cv.IMREAD_GRAYSCALE)*255
         self.no_fin_segmentation=cv.imread(nf_seg_path,cv.IMREAD_GRAYSCALE)*255   
         self.full_segmentation=cv.imread(full_seg_path)*255   
         self.dorsal_mask=cv.imread(dorsal_seg_path,cv.IMREAD_GRAYSCALE)*255

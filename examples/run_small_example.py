@@ -13,12 +13,18 @@ with open(os.path.join('..','weight_prediction_092025.pkl'), 'rb') as file:
  
 def main():
     dir_name = "example_fish"
-    full_dir = os.path.join("sushi", dir_name)
+    raw_data_dir = os.path.join("sushi", dir_name)
     excel_dir = 'spreadsheets'
+    
+    # read in the spreadsheet with the image names included
     df = pd.read_excel(os.path.join(excel_dir, dir_name+'.xlsx'),nrows=4,sheet_name=0)
     
-    im_names = df["FIshID"]
-    im_paths = [os.path.join(full_dir, id + ".jpg") for id in im_names]
+    """FIshID is the column name for the columns containing the image file name, 
+    not including the extension, .jpg in this case. Please look refer to this spreadsheet 
+    as a template for processing new datasets
+    """
+    im_names = df["FIshID"]  
+    im_paths = [os.path.join(raw_data_dir, id + ".jpg") for id in im_names]
     
     # read in Meta's Segment Anything Model (SAM)
     print('reading sam...')
@@ -26,6 +32,7 @@ def main():
     print('sam read')
     predictor = SamPredictor(sam) 
     
+    # the subjective qualities determined by the user during preprocesing
     qualities=[]
     
     # fork length, image scale, area, and no fin area
