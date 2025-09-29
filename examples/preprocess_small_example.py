@@ -10,7 +10,6 @@ def main():
     
     im_names = df["FIshID"]
     im_paths = [os.path.join(dir_name, id + ".jpg") for id in im_names]
-    print(im_paths[:2])
     get_rois_flips_and_bad_paths(im_paths[:4])
     
 if __name__ == "__main__":
