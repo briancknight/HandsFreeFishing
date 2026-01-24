@@ -14,11 +14,12 @@ with open(os.path.join('..','weight_prediction_092025.pkl'), 'rb') as file:
     
 def main():
     dir_name = "example_fish"
+    spreadsheet_name = "example_fish"
     raw_data_dir = os.path.join("sushi", dir_name)
     excel_dir = 'spreadsheets'
-    df = pd.read_excel(os.path.join(excel_dir, dir_name+'.xlsx'),sheet_name=0)
+    df = pd.read_excel(os.path.join(excel_dir, spreadsheet_name+'.xlsx'),sheet_name=0)
     
-    im_names = df["FIshID"]
+    im_names = df["FishID"]
     im_paths = [os.path.join(raw_data_dir, id + ".jpg") for id in im_names]
     
     # read in Meta's Segment Anything Model (SAM)
@@ -45,13 +46,14 @@ def main():
     landmark_lengths=[]
     
     # options
+    fins_to_clip = ['caudal', 'dorsal', 'adipose', 'anal', 'pelvic', 'pectoral']
     save_xlsx = True
     save_segmentations = True
     predict_weights = True
     
     for (i,im_path) in enumerate(im_paths):
         
-        fish = fin_clipping.fish(im_path, predictor,write_masks=True)
+        fish = fin_clipping.fish(im_path, predictor,write_masks=True,fins_to_clip=fins_to_clip)
         fish.run()
         
         if save_segmentations:
@@ -110,7 +112,7 @@ def main():
         landmark_lengths = np.array(landmark_lengths)
         for i in range(len(landmark_lengths[0])):
             df["Landmark Length " + str(i)] = landmark_lengths[:, i]
-        df.to_excel(os.path.join('measurements', dir_name,'output_small.xlsx'))
+        df.to_excel(os.path.join('measurements', dir_name,'output.xlsx'))
 
 if __name__ == "__main__":
     main()

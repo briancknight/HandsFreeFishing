@@ -4,6 +4,7 @@ import csv
 import regex as re
 from tifffile import imread, imwrite
 import cv2 as cv
+from screeninfo import get_screen_size
 
 def user_crop_image(image_path=None, image=None, ds=8):
     """Crops an image based on user-selected region."""
@@ -19,7 +20,15 @@ def user_crop_image(image_path=None, image=None, ds=8):
     ds_img = cv.resize(img, (0,0), fx=1/ds, fy=1/ds) 
 
     # Display the image for user to select the region
-    roi = cv.selectROI("Select Region to Crop", ds_img)
+    # Display the image for user to select the region
+    window_name = "Select Region to Crop"
+    screen_width, screen_height = get_screen_size()
+    window_width = int(np.floor(screen_width/4))
+    window_height = int(np.floor(screen_height/4))
+    cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+    
+    cv.resizeWindow(window_name, window_width, window_height)
+    roi = cv.selectROI(window_name, ds_img)
 
     # Crop the image using the selected region
     cropped_img = img[ds*int(roi[1]):ds*int(roi[1]+roi[3]), ds*int(roi[0]):ds*int(roi[0]+roi[2])]

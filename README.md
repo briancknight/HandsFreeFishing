@@ -20,7 +20,7 @@ is not included here.
     Windows 10: myvenv\Scripts\activate
 - install HandsFreeFishing via the pyproject.toml by running the command:
     pip install .
-- finally, visit https://github.com/facebookresearch/segment-anything, scroll down to the 'Model Checkpoints' section, and download the ViT-l SAM model. Move this to the HandsFreeFishing directory. *NOTE* this model is about 2.5 GB in size
+- finally, visit https://github.com/facebookresearch/segment-anything, scroll down to the 'Model Checkpoints' section, and download the ViT-l SAM model. Move this to the HandsFreeFishing directory. *NOTE* this model is about 2.5 GB in size. You are welcome to use the smaller models by modifying the code which loads the predictor.
 
 ***To test your installation:***
 - navigate to the examples folder, and in command line, run:
@@ -28,10 +28,10 @@ is not included here.
 - this will display an image of a fish, and you should provide a bounding box. Using your mouse, click and hold where you would like one corner to be, then drag the mouse
 to the opposite corner, making sure to contain the entire fish in the box. If you don't like your box, let the mouse go, then click anywhere to create a new box.
 - once you are happy with your box, press 'enter' once. In the command line, you should be prompted with three questions about the fish's orientation & quality. Provide your answer and then press 'enter' for each question. For example, 
-for a fish facing left, right-side up, of good quality, you would type 0, 0, 0.
+for a fish facing left, right-side up, of good quality, you would type 0 then press enter, type 0 then press enter, and type 0 and press enter. For a fish facing right, right-side up, of bad quality, the sequence would be 1, 0, 1. Any string other than a '1' will be taken to be a 0, so, for the first example given, you could simply type enter three times in succession.
 - You should now see a 'measurements' folder in your examples directory; this contains 
 the data you just provided for this test image. These can be changed manually if you accidentally input the wrong orienation, for example.
 - in the command line, run:
     python run_small_example.py
 - this will take a minute or so to run; it is loading the model and instatiating it for the given image
-- You should now see a 'segmentations' folder in your examples directory; this contains the segmentations generated from the images and the measurements taken in the preprocessing step
+- You should now see a 'segmentations' folder in your examples directory; this should contains subfolders for each segmentation produced, generated from the images and the measurements taken in the preprocessing step

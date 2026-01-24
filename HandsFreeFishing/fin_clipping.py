@@ -186,7 +186,7 @@ def rotate_image(image, angle, center_point=None):
 # fish class, segments fish, fins, eyeball & computes a FL & (predicted) non-fin area
 class fish():
     
-    def __init__(self, image_path, predictor, write_masks = True, mask_ext = '.png', scale=None, num_fish=None, n_steps = 2, n_partitions=5, ord=100, verbose=False):
+    def __init__(self, image_path, predictor, write_masks = True, mask_ext = '.png', fins_to_clip = None, scale=None, num_fish=None, n_steps = 2, n_partitions=5, ord=100, verbose=False):
         
         self.im_path = image_path
         image_path_split = os.path.split(self.im_path)
@@ -199,6 +199,15 @@ class fish():
         self.n_steps=n_steps
         self.ord=ord
         self.n_partitions=n_partitions
+        
+        if fins_to_clip is None:
+            self.include_all_fins = True
+        else:
+            self.include_all_fins = False
+            self.included_fins={'caudal':False,'adipose':False,'dorsal':False,
+                                'anal':False,'pelvic':False, 'pectoral':False}
+            for fin in fins_to_clip:
+                self.included_fins[fin.lower()] = True
             
         # for images with multiple fish
         if num_fish is None:
@@ -209,7 +218,12 @@ class fish():
             self.im_path = new_im_path
         
         # read in image and set initialize SAM
-        self.image = cv.cvtColor(cv.imread(self.im_path), cv.COLOR_BGR2RGB)
+        tmp_img = cv.imread(self.im_path)
+        if tmp_img is None:
+            raise FileNotFoundError(f"Failed to find image path: {self.im_path}")
+        else:
+            self.image = cv.cvtColor(tmp_img, cv.COLOR_BGR2RGB)
+            
         self.copy = np.copy(self.image)
         self.dims = np.shape(self.image[:,:,0])
         
@@ -271,17 +285,30 @@ class fish():
             
     def segment_fish(self):
         
-        fish_mask_path = os.path.join('segmentations', self.dir, 'initial_mask_' + self.im_name + self.mask_ext)
+        fish_mask_path = os.path.join('segmentations', self.dir, 'initial_masks', 'initial_mask_' + self.im_name + self.mask_ext)
         
         if self.frozen:
             print('using existing segmentation at: ', fish_mask_path)
             self.fish_mask = cv.imread(fish_mask_path)[:,:,0] == 255
         else:
             self.predictor.set_image(self.image)
-            fish_masks,q,o = self.predictor.predict(box=self.prediction_box, multimask_output=True)
-            idx=np.argmax(q)
-            self.fish_mask = fish_masks[idx]
-        
+
+            # self.prediction_box = np.array([roi[0],roi[1],roi[0]+roi[2], roi[1]+roi[3]])
+            shift = 5/self.scale
+            # perturb the prediction box slightly along both axes, and compute a segmentation for each box, then intersect them to get a more consistent segmentation
+            pred_boxes = [self.prediction_box, self.prediction_box + np.array([-shift,0,shift,0]), self.prediction_box + np.array([-shift,-shift,shift,shift]),
+                          self.prediction_box + np.array([-shift,-shift,shift,shift]), self.prediction_box + np.array([0,-shift,0,shift])]
+                        
+            for (i,pred_box) in enumerate(pred_boxes):
+                # fish_masks,q,o = self.predictor.predict(box=pred_box, multimask_output=True)
+                fish_mask = self.predictor.predict(box=pred_box, multimask_output=False)
+                if i == 0: # initialize current_mask
+                    current_mask = fish_mask[0][0]
+                else: # intersect with previous prediction
+                    current_mask *= fish_mask[0][0]
+                    
+            self.fish_mask = current_mask # this is the result of intersecting all predicted masks
+            
         self.initial_fish_mask = np.copy(self.fish_mask)
         
         self.fish_mask =  get_largest_connected_component((self.fish_mask*255).astype(np.uint8))*255
@@ -478,7 +505,7 @@ class fish():
     def get_pectoral_box(self, pectoral_ratio):
         x = self.recon_offset_rotated[:,0]
         y = self.recon_offset_rotated[:,1]
-        x_left_middle_idxs=np.argwhere(np.array([x > 0.2*np.mean(x), x < 0.4*np.mean(x)]).all(axis=0))
+        x_left_middle_idxs=np.argwhere(np.array([x > 0.3*np.mean(x), x < 0.5*np.mean(x)]).all(axis=0))
         max_y = np.max(y[x_left_middle_idxs])
         pectoral_idx = np.argwhere(y==max_y)[0]
         pectoral_x = x[pectoral_idx]
@@ -586,19 +613,60 @@ class fish():
 
     def get_mask(self, box):
                     
-        mask, q, o = self.predictor.predict(box=box)
-
-        idx = np.argmax(q)
-        best_mask = mask[idx].astype(np.uint8)
-        # kernel = np.ones((15, 15), np.uint8) 
-        # best_mask = cv.erode(best_mask, kernel,iterations=1)
+        shift = 1.5/self.scale
+        # perturb the prediction box slightly along both axes, and compute a segmentation for each box, then intersect them to get a more consistent segmentation
+        pred_boxes = [box, box + np.array([-shift,0,shift,0]), box + np.array([-shift,-shift,shift,shift]),
+                        box + np.array([-shift,-shift,shift,shift]), box + np.array([0,-shift,0,shift])]
+                    
+        for (i,pred_box) in enumerate(pred_boxes):
+            mask = self.predictor.predict(box=pred_box, multimask_output=False)
+            if i == 0: # initialize current_mask
+                current_mask = mask[0][0]
+            else: # intersect with previous prediction
+                current_mask *= mask[0][0]
         
-        return get_largest_connected_component(best_mask)*255
+        # mask, q, o = self.predictor.predict(box=box)
+
+        # idx = np.argmax(q)
+        # best_mask = mask[idx].astype(np.uint8)
+        # # kernel = np.ones((15, 15), np.uint8) 
+        # # best_mask = cv.erode(best_mask, kernel,iterations=1)
+        
+        return get_largest_connected_component((current_mask*255).astype(np.uint8))*255 #get_largest_connected_component(best_mask)*255
+    
+    def get_fin_masks(self):
+        
+        if self.include_all_fins:
+            return [self.eye_mask, self.dorsal_mask, self.adipose_mask, self.caudal_mask,
+                 self.anal_mask, self.pelvic_mask, self.pectoral_mask]
+        else:
+            mask_list=[self.eye_mask]
+            
+            # if self.included_fins['eye']:
+                # mask_list.append(self.eye_mask)
+            if self.included_fins['dorsal']:
+                mask_list.append(self.dorsal_mask)
+            if self.included_fins['adipose']:
+                mask_list.append(self.adipose_mask)
+            if self.included_fins['caudal']:
+                mask_list.append(self.caudal_mask)
+            if self.included_fins['anal']:
+                mask_list.append(self.anal_mask)
+            if self.included_fins['pelvic']:
+                mask_list.append(self.pelvic_mask)
+            if self.included_fins['pectoral']:
+                mask_list.append(self.pectoral_mask)
+        return mask_list 
     
     def write_mask(self, mask, name="caudal"):
         
-
-        cv.imwrite(os.path.join('segmentations', self.dir, name+'_mask_' + self.im_name + self.mask_ext), 255*mask)
+        dir_path=os.path.join('segmentations', self.dir, name+'_masks')
+        if os.path.exists(dir_path):
+            pass
+        else:
+            os.mkdir(dir_path) 
+        
+        cv.imwrite(os.path.join('segmentations', self.dir, name+'_masks', name+'_mask_' + self.im_name + self.mask_ext), 255*mask)
 
         # cv.imwrite(os.path.join('segmentations', self.dir, name+'_mask_' + self.im_name + self.mask_ext), 255*mask[self.prediction_box[1]:self.prediction_box[3],self.prediction_box[0]:self.prediction_box[2]])
 
@@ -613,8 +681,7 @@ class fish():
         # self.full_segmentation = self.fish_mask_full
         self.no_fin_segmentation = self.fish_mask_full
         
-        masks = [self.eye_mask, self.dorsal_mask, self.adipose_mask, self.caudal_mask,
-                 self.anal_mask, self.pelvic_mask, self.pectoral_mask]
+        masks = self.get_fin_masks()
         
         for (i,mask) in enumerate(masks):
             
@@ -1024,7 +1091,7 @@ class fish():
                 print('convex hull mask saved')
 
     def write_fin_masks(self):
-            
+        
         self.write_mask(self.eye_mask, name="eye")
         self.write_mask(self.dorsal_mask, name="dorsal")
         self.write_mask(self.adipose_mask, name="adipose")
@@ -1042,10 +1109,17 @@ class fish():
                 pass
             else:
                 os.makedirs(os.path.join('segmentations', self.dir),exist_ok=True)
-                
-            cv.imwrite(os.path.join('segmentations', self.dir, 'initial_mask_' + self.im_name + self.mask_ext), 255*self.fish_mask_full)  
-            cv.imwrite(os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext), 255*self.full_segmentation)
-            cv.imwrite(os.path.join('segmentations', self.dir, 'no_fin_mask_' + self.im_name + self.mask_ext), 255*self.no_fin_segmentation)
+            
+            self.write_mask(self.fish_mask_full, name="initial")
+            self.write_mask(self.full_segmentation, name="full")
+            self.write_mask(self.no_fin_segmentation, name="no_fin")
+            # os.makedirs(os.path.join('segmentations', self.dir, 'initial_masks'),exist_ok=True) 
+            # os.makedirs(os.path.join('segmentations', self.dir, 'full_masks'),exist_ok=True)  
+            # os.makedirs(os.path.join('segmentations', self.dir, 'no_fin_masks'),exist_ok=True)  
+            
+            # cv.imwrite(os.path.join('segmentations', self.dir, 'initial_masks', 'initial_mask_' + self.im_name + self.mask_ext), 255*self.fish_mask_full)  
+            # cv.imwrite(os.path.join('segmentations', self.dir, 'full_masks', 'full_mask_' + self.im_name + self.mask_ext), 255*self.full_segmentation)
+            # cv.imwrite(os.path.join('segmentations', self.dir, 'no_fin_masks', 'no_fin_mask_'+ self.im_name + self.mask_ext), 255*self.no_fin_segmentation)
     
     def check_freezer(self):
         self.frozen=False
@@ -1055,16 +1129,16 @@ class fish():
         else:
             raise Exception('Preprocessing data is unavailable, please run the preprocessing script first.')
         
-        initial_seg_path = os.path.join('segmentations', self.dir, 'initial_mask_' + self.im_name + self.mask_ext)
-        nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_mask_' + self.im_name + self.mask_ext)
-        full_seg_path = os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext)
-        dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_mask_' + self.im_name + self.mask_ext)
-        adipose_seg_path = os.path.join('segmentations', self.dir, 'adipose_mask_' + self.im_name + self.mask_ext)
-        caudal_seg_path = os.path.join('segmentations', self.dir, 'caudal_mask_' + self.im_name + self.mask_ext)
-        anal_seg_path = os.path.join('segmentations', self.dir, 'anal_mask_' + self.im_name + self.mask_ext)
-        pelvic_seg_path = os.path.join('segmentations', self.dir, 'pelvic_mask_' + self.im_name + self.mask_ext)
-        pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_mask_' + self.im_name + self.mask_ext)
-        eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
+        initial_seg_path = os.path.join('segmentations', self.dir, 'initial_masks', 'initial_mask_' + self.im_name + self.mask_ext)
+        nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_masks', 'no_fin_mask_' + self.im_name + self.mask_ext)
+        full_seg_path = os.path.join('segmentations', self.dir, 'full_masks', 'full_mask_' + self.im_name + self.mask_ext)
+        dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_masks', 'dorsal_mask_' + self.im_name + self.mask_ext)
+        adipose_seg_path = os.path.join('segmentations', self.dir, 'adipose_masks', 'adipose_mask_' + self.im_name + self.mask_ext)
+        caudal_seg_path = os.path.join('segmentations', self.dir, 'caudal_masks', 'caudal_mask_' + self.im_name + self.mask_ext)
+        anal_seg_path = os.path.join('segmentations', self.dir, 'anal_masks', 'anal_mask_' + self.im_name + self.mask_ext)
+        pelvic_seg_path = os.path.join('segmentations', self.dir, 'pelvic_masks', 'pelvic_mask_' + self.im_name + self.mask_ext)
+        pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_masks', 'pectoral_mask_' + self.im_name + self.mask_ext)
+        eye_seg_path = os.path.join('segmentations', self.dir, 'eye_masks', 'eye_mask_' + self.im_name + self.mask_ext)
         
         all_seg_paths = [initial_seg_path, nf_seg_path, full_seg_path, dorsal_seg_path, adipose_seg_path, 
                      caudal_seg_path, anal_seg_path, pelvic_seg_path, pectoral_seg_path, 
@@ -1077,17 +1151,17 @@ class fish():
         
     def thaw(self):
 
-        initial_seg_path = os.path.join('segmentations', self.dir, 'initial_mask_' + self.im_name + self.mask_ext)
-        nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_mask_' + self.im_name + self.mask_ext)
-        full_seg_path = os.path.join('segmentations', self.dir, 'full_mask_' + self.im_name + self.mask_ext)
-        dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_mask_' + self.im_name + self.mask_ext)
-        adipose_seg_path = os.path.join('segmentations', self.dir, 'adipose_mask_' + self.im_name + self.mask_ext)
-        caudal_seg_path = os.path.join('segmentations', self.dir, 'caudal_mask_' + self.im_name + self.mask_ext)
-        anal_seg_path = os.path.join('segmentations', self.dir, 'anal_mask_' + self.im_name + self.mask_ext)
-        pelvic_seg_path = os.path.join('segmentations', self.dir, 'pelvic_mask_' + self.im_name + self.mask_ext)
-        pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_mask_' + self.im_name + self.mask_ext)
-        eye_seg_path = os.path.join('segmentations', self.dir, 'eye_mask_' + self.im_name + self.mask_ext)
-
+        initial_seg_path = os.path.join('segmentations', self.dir, 'initial_masks', 'initial_mask_' + self.im_name + self.mask_ext)
+        nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_masks', 'no_fin_mask_' + self.im_name + self.mask_ext)
+        full_seg_path = os.path.join('segmentations', self.dir, 'full_masks', 'full_mask_' + self.im_name + self.mask_ext)
+        dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_masks', 'dorsal_mask_' + self.im_name + self.mask_ext)
+        adipose_seg_path = os.path.join('segmentations', self.dir, 'adipose_masks', 'adipose_mask_' + self.im_name + self.mask_ext)
+        caudal_seg_path = os.path.join('segmentations', self.dir, 'caudal_masks', 'caudal_mask_' + self.im_name + self.mask_ext)
+        anal_seg_path = os.path.join('segmentations', self.dir, 'anal_masks', 'anal_mask_' + self.im_name + self.mask_ext)
+        pelvic_seg_path = os.path.join('segmentations', self.dir, 'pelvic_masks', 'pelvic_mask_' + self.im_name + self.mask_ext)
+        pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_masks', 'pectoral_mask_' + self.im_name + self.mask_ext)
+        eye_seg_path = os.path.join('segmentations', self.dir, 'eye_masks', 'eye_mask_' + self.im_name + self.mask_ext)
+        
         self.initial_fish_mask = cv.imread(initial_seg_path, cv.IMREAD_GRAYSCALE)*255
         self.no_fin_segmentation=cv.imread(nf_seg_path,cv.IMREAD_GRAYSCALE)*255   
         self.full_segmentation=cv.imread(full_seg_path)*255   
@@ -1197,9 +1271,6 @@ def main():
     axes[0,1].set_title('Segmentation')
     
     # Display the third image on the right subplot
-    axes[1,1].imshow(np.sum(myFish.filled_sectors,axis=0)[slice])
-    axes[1,1].set_title('Fileted Segmentation')
-    # Display the third image on the right subplot
     axes[1,0].imshow(myFish.no_fin_segmentation[slice])
     axes[1,0].set_title('No Fin Segmentation')
 
@@ -1212,11 +1283,6 @@ def main():
 
     # Show the plot
     plt.show()
-    
-    def create_figure(myFish):
-        box = myFish.prediction_box
-        slice = np.s_[box[1]:box[3], box[0]:box[2]]
-    pass
     
 if __name__ == '__main__':
     main()
