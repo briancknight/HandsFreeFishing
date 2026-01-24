@@ -23,7 +23,7 @@ def main():
     not including the extension, .jpg in this case. Please look refer to this spreadsheet 
     as a template for processing new datasets
     """
-    im_names = df["FIshID"]  
+    im_names = df["FishID"]  
     im_paths = [os.path.join(raw_data_dir, id + ".jpg") for id in im_names]
     
     # read in Meta's Segment Anything Model (SAM)
@@ -52,13 +52,14 @@ def main():
     landmark_lengths=[]
     
     # options
+    fins_to_clip = ['caudal', 'dorsal', 'adipose', 'anal', 'pelvic', 'pectoral']
     save_xlsx = True
     save_segmentations = True
     predict_weights = True
     
     for (i,im_path) in enumerate(im_paths[:4]):
         
-        fish = fin_clipping.fish(im_path, predictor,write_masks=True)
+        fish = fin_clipping.fish(im_path, predictor,write_masks=True, fins_to_clip=fins_to_clip)
         fish.run()
         
         if save_segmentations:
