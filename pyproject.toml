@@ -48,7 +48,7 @@ dependencies = [
   'scikit-learn==1.6.1', 
   'scikit-image==0.25.2',
   'lsq-ellipse',
-  'screeninfo==0.8.1,
+  'screeninfo==0.8.1',
   'segment-anything @ git+https://github.com/facebookresearch/segment-anything.git',
   ]
 
@@ -95,7 +95,7 @@ requires = ['setuptools>=77.0.3',
     'scikit-learn==1.6.1',
     'scikit-image==0.25.2',
     'lsq-ellipse==2.2.1',
-    'screeninfo==0.8.1,
+    'screeninfo==0.8.1',
 ]
 build-backend = "setuptools.build_meta"
 
