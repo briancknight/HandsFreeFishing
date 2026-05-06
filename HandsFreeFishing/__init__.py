@@ -1,4 +1,4 @@
 from .fin_clipping import (
-    fish,
+    fish, adult_stealhead, compute_contour
 )
-from .preprocessing import get_rois_flips_and_bad_paths
+from .preprocessing import get_rois_flips_and_bad_paths, preprocess_adult_steelhead, preprocess_adult_steelhead_updated
