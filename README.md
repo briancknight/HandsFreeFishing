@@ -14,9 +14,9 @@ is not included here.
 *JUVENILE CHINOOK:*
 - run the following: 
     git clone https://github.com/briancknight/HandsFreeFishing.git
-*ADULT STEELHEAD:
+*ADULT STEELHEAD:*
 - run the following:
-    git clone https://github.com/briancknight/HandsFreeFishing.git
+    git clone https://github.com/briancknight/HandsFreeFishing/tree/adult_steelhead
 - navigate to the HandsFreeFishing directory
 - create a python virtual environment by running the command:
     python -m venv myvenv
