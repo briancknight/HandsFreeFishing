@@ -11,12 +11,15 @@ is not included here.
 
 - be sure to have at least Python >= 3.8 installed
 - in terminal navigate to the directory you'd like to place this project
-*JUVENILE CHINOOK:*
+
+*FOR JUVENILE CHINOOK:*
 - run the following: 
     git clone https://github.com/briancknight/HandsFreeFishing.git
-*ADULT STEELHEAD:*
+
+*FOR ADULT STEELHEAD:*
 - run the following:
     git clone https://github.com/briancknight/HandsFreeFishing/tree/adult_steelhead
+    
 - navigate to the HandsFreeFishing directory
 - create a python virtual environment by running the command:
     python -m venv myvenv
