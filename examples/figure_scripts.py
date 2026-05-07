@@ -51,10 +51,10 @@ def get_cropped_annotated_img(myFish,contour_color=(107,126,221),bg='black',with
         segmentation=stack_mask(myFish.fish_mask_full)/255
     else:
         contour_img=get_fish_contour_img(myFish, myFish.nf_recon)
-        if myFish.no_fin_convex_hull_mask is None:
-            segmentation=stack_mask(myFish.no_fin_segmentation)/255
-        else:
+        if hasattr(myFish,"no_fin_convex_hull_mask"):
             segmentation=stack_mask(myFish.no_fin_convex_hull_mask)/255
+        else:
+            segmentation=stack_mask(myFish.no_fin_segmentation)/255
             
     contour_mask=stack_mask(contour_img)
     contour_mask_green=stack_mask(contour_img,color=contour_color)
@@ -127,10 +127,10 @@ def save_example_figures(myfish, im_name, figure_path = 'figures'):
         slice = np.s_[box[1]:box[3], box[0]:box[2]]
         # cv.imwrite(im_names[i] + '_slice.png', cv.cvtColor(myfish.image[slice], cv.COLOR_BGR2RGB))
 
-        if myfish.no_fin_convex_hull_mask is not None:
-            cropped_mask = myfish.no_fin_convex_hull_mask * 255
-        else:
-            cropped_mask = myfish.no_fin_segmentation * 255
+        # if hasattr(myfish,"no_fin_convex_hull_mask"):
+        #     cropped_mask = myfish.no_fin_convex_hull_mask * 255
+        # else:
+        cropped_mask = myfish.no_fin_segmentation * 255
             
         cropped_mask = np.stack([cropped_mask, cropped_mask, cropped_mask], axis=-1)
 
@@ -155,6 +155,7 @@ def save_example_figures(myfish, im_name, figure_path = 'figures'):
         
         # fork length visual
         FL_image = get_FL_image(myfish,contour=True,contour_color='g')
+        print('creating FL image at: ', os.path.join(figure_path, im_name + '_FL_image.png'))
         cv.imwrite(os.path.join(figure_path, im_name + '_FL_image.png'), cv.cvtColor(bg_black_to_white(FL_image[slice]).astype(np.uint8), cv.COLOR_BGR2RGB))
 
         # eye diameter visual
