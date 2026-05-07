@@ -264,15 +264,15 @@ def get_landmark_points(fish,ord=ord):
 def save_landmark_image(fish, landmark_points, name='my_fish'):
     image=fish.image.copy()
     for (idx,point) in enumerate(landmark_points):
-        center_coordinates = tuple(point.astype(int))
-        radius = 20
-        color = (0, 0, 255) # Red color in BGR (Blue, Green, Red)
+        (x,y) = tuple(point.astype(int))
+        radius = 13
+        color = (0, 255, 0) # Red color in BGR (Blue, Green, Red)
         thickness = -1 # -1 fills the circle
 
         # Use cv2.circle() to draw each point
-        cv2.circle(image, center_coordinates, radius, color, thickness)
-        cv2.putText(image, str(idx+1), center_coordinates, cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
+        cv2.circle(image, (x,y), radius, color, thickness)
+        cv2.putText(image, str(idx+1), (x+10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,255,0), 2)
     
     print('saving...', name+'_land_mark_points.png')
-    cv2.imwrite(name+'_land_mark_points.png', image)
+    cv2.imwrite(name+'_land_mark_points.png', cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
     
