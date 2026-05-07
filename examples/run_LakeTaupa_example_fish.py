@@ -19,7 +19,7 @@ def main(dir_name="subset", spreadsheet_name="subset"):
     df = pd.DataFrame()#pd.read_excel(os.path.join(excel_dir, spreadsheet_name+'.xlsx'),sheet_name=0)
     
     if dir_name=="LakeTaupo_example_fish":
-        im_names=[f"{i}_2024" for i in range(5,22)]
+        im_names=[f"{i}_2024" for i in [5,6]]
         im_paths = [os.path.join(raw_data_dir, id + ".jpg") for id in im_names]
     
     if dir_name=="subset":
@@ -132,69 +132,8 @@ def main(dir_name="subset", spreadsheet_name="subset"):
             df["Landmark Length " + str(i)] = landmark_lengths[:, i]
         df.to_excel(os.path.join('measurements', dir_name,'output.xlsx'))
 
-def test_clahe():
-    import cv2 as cv
-    from matplotlib import pyplot as plt
-    
-    clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(25, 25))
-    def apply_clahe(cv2img):
-        hsvimg = cv.cvtColor(cv2img, cv.COLOR_BGR2HSV)
-        vimg = hsvimg[:,:,2].copy()
-        vimg_adj = clahe.apply(vimg)
-        hsvimg[:,:,2] = vimg_adj
-        
-        return cv.cvtColor(hsvimg, cv.COLOR_HSV2BGR)
-
-    def apply_yuv_normalization(cv2img):
-        # Convert the image to YUV color space
-        img_yuv = cv2.cvtColor(cv2img, cv.COLOR_BGR2YUV)
-
-        # Apply histogram equalization to the Y channel (luminance)
-        img_yuv[:,:,0] = cv.equalizeHist(img_yuv[:,:,0])
-
-        # Convert the image back to BGR color space
-        return cv.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
-    
-    def apply_stackoverflow_sol(img):
-        
-        hsvimg = cv.cvtColor(img, cv.COLOR_BGR2HSV)
-        hsv_planes = cv2.split(hsvimg)
-
-        result_planes = []
-        result_norm_planes = []
-        for (i,plane) in enumerate(hsv_planes):
-            if i != 2:
-                result_planes.append(plane)
-                result_norm_planes.append(plane)
-            else: # apply only to V channel
-                dilated_img = cv.dilate(plane, np.ones((7,7), np.uint8))
-                bg_img = cv.medianBlur(dilated_img, 21)
-                diff_img = 255 - cv.absdiff(plane, bg_img)
-                norm_img = cv.normalize(diff_img,None, alpha=0, beta=255, norm_type=cv.NORM_MINMAX, dtype=cv.CV_8UC1)
-                result_planes.append(diff_img)
-                result_norm_planes.append(norm_img)
-            
-        # result = cv.merge(result_planes)
-        result_norm = cv.merge(result_norm_planes)
-        return cv.cvtColor(result_norm, cv.COLOR_HSV2BGR)
-    
-    img=cv.imread('sushi/subset/116_snailmix.jpeg')
-    img_clahe_adj = apply_clahe(img)
-    # img_yuv_adj = apply_yuv_normalization(img)
-    # img_stackoverflow_adj = apply_stackoverflow_sol(img)
-    fig,axs=plt.subplots(1,2)
-    axs[0].imshow(img)
-    axs[1].imshow(img_clahe_adj)
-    # axs[2].imshow(img_yuv_adj)
-    # axs[3].imshow(img_stackoverflow_adj)
-    
-    # fig.show()
-    # plt.imshow(img_adj)
-    plt.show()
-    
 if __name__ == "__main__":
     main(dir_name="LakeTaupo_example_fish")
-    # test_clahe()
 
 
     

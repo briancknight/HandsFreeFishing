@@ -10,12 +10,10 @@ def pre_process(project_name="LakeTaupo_example_fish", spreadsheet_name="LakeTau
         df=pd.read_csv(os.path.join('spreadsheets', spreadsheet_name+'.csv'))
         im_paths = [os.path.join(dir_name, f"{str(df['ID'][i])}_{df['overalldiet'][i]}.jpeg") for i in range(df.shape[0])]
     else:
-        im_names=[os.path.join(f"{i}_2024") for i in range(5,22)]
+        im_names=[os.path.join(f"{i}_2024") for i in [5,6]]
         im_paths = [os.path.join(dir_name, id + ".jpg") for id in im_names]
         
-    print(im_paths)
-    # print(im_paths) uncomment for debugging
-    preprocess_adult_steelhead_updated(im_paths,landmark_length=50)
+    preprocess_adult_steelhead_updated(im_paths,landmark_length=50,ds=4)
     
 if __name__ == "__main__":
     # main()

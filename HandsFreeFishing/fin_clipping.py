@@ -1920,8 +1920,8 @@ class adult_stealhead(fish):
             self.pectoral_mask, pectoral_score = self.get_mask(self.pectoral_box)
         
         names = ["head", "eye", "dorsal", "adipose", "caudal", "anal", "pelvic", "pectoral"]
-        scores = [head_score, eye_score, dorsal_score, adipose_score, caudal_score, anal_score, pelvic_score, pectoral_score]
-        for (i,score) in enumerate(scores):
+        self.scores = [head_score, eye_score, dorsal_score, adipose_score, caudal_score, anal_score, pelvic_score, pectoral_score]
+        for (i,score) in enumerate(self.scores):
             print(f"{names[i]}_mask score= {score}", flush=True)
             
     def get_scale(self,ds=1):

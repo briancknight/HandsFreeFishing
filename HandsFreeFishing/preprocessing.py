@@ -7,16 +7,23 @@ import cv2 as cv
 from screeninfo import get_monitors
 
 class LandmarkEditor:
-    def __init__(self, window_name, image, points,point_names=None, box_names = None, radius=10, landmark_length=5):        
+    def __init__(self, window_name, image, points,point_names=None, box_names = None, radius=10, landmark_length=50,ds=1):   
+        # meta screen data
+        self.ds = ds 
+        self.screen_width, self.screen_height = get_screen_size()
+        self.window_width = self.ds*int(np.floor(self.screen_width/4))
+        self.window_height = self.ds*int(np.floor(self.screen_height/4)) 
+         
         # parameters
-        self.fontsize = 1.5
-        self.fontthickness = 2
+        self.fontsize = 1.5/self.ds
+        self.fontthickness = np.max([int(2/self.ds), 1])
         self.window_name = window_name
         self.image = image
+        self.ds_image = cv.resize(self.image, (0,0), fx=1/self.ds, fy=1/self.ds) 
         self.points = points  # List of [x, y]
         self.selected_point_idx = -1
         self.dragging = False
-        self.radius = radius  # Detection radius for selecting a point
+        self.radius = int(radius/self.ds)  # Detection radius for selecting a point
         self.landmark_length = landmark_length
         self.MAX_POINTS = 8
         self.MAX_BOXES = 3
@@ -86,7 +93,7 @@ class LandmarkEditor:
         cv.setMouseCallback(window_name, self.mouse_callback_n_points)
         
         while len(self.points)<self.MAX_POINTS:
-            img_display = self.image.copy()
+            img_display = self.ds_image.copy()
             
             # Draw all landmarks
             for i, (px, py) in enumerate(self.points):
@@ -112,7 +119,7 @@ class LandmarkEditor:
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
         while True:
-            img_display = self.image.copy()
+            img_display = self.ds_image.copy()
             
             # Draw all landmarks
             for i, (px, py) in enumerate(self.points):
@@ -132,40 +139,36 @@ class LandmarkEditor:
 
         cv.destroyAllWindows()
          
-    def user_crop_image(self, ds=8):
+    def user_crop_image(self):
         """Gathers bounding box from an image based on user-selected region."""
 
         # Display the image for user to select the region
 
-        screen_width, screen_height = get_screen_size()
-        window_width = int(np.floor(screen_width/4))
-        window_height = int(np.floor(screen_height/4))
-        window_name = f"{self.window_name}: DRAW A BOUNDING BOX AROUND THE {self.box_names[0].upper()}"
+        window_name = f"{self.window_name}: DRAW A BOUNDING BOX AROUND THE {self.box_names[0].upper()},{self.box_names[1].upper()}, {self.box_names[2].upper()}"
         cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-        ds_img = cv.resize(self.image, (0,0), fx=1/ds, fy=1/ds) 
-        cv.resizeWindow(window_name, window_width, window_height)
+        cv.resizeWindow(window_name, self.window_width, self.window_height)
         self.rois = []
-
+        img_display = self.ds_image.copy()
+        
         while True:
+            
             if len(self.rois) < 3:  
-                self.rois.append(ds*np.array(cv.selectROI(window_name, ds_img)))     
+                self.rois.append(np.array(cv.selectROI(window_name, img_display)))     
             # Draw all landmarks
             for i, rect in enumerate(self.rois):
                 x, y, w, h = rect
                 # Use NumPy slicing to crop the image: image[y:y+h, x:x+w]
-                cv.rectangle(ds_img, (x,y), (x+w,y+h), (255,0,0),thickness=3)
-                cv.putText(ds_img, self.box_names[i], (x + 10, y - 10), 
+                cv.rectangle(img_display, (x,y), (x+w,y+h), (255,0,0),thickness=3)
+                cv.putText(img_display, self.box_names[i], (x + 10, y - 10), 
                             cv.FONT_HERSHEY_SIMPLEX, self.fontsize, (0, 255, 0), self.fontthickness)
             
             
             
             if len(self.rois)==3:
                 break
-            else:
-                window_name=f"{self.window_name}: DRAW A BOUNDING BOX AROUND THE {self.box_names[len(self.rois)].upper()}"
-            cv.imshow(window_name, ds_img)
-            print(len(self.rois))
-            key = cv.waitKey(1) & 0xFF
+                # window_name=f"{self.window_name}: DRAW A BOUNDING BOX AROUND THE {self.box_names[len(self.rois)].upper()}"
+            cv.imshow(window_name, img_display)
+            # key = cv.waitKey(1) & 0xFF
             
     
         cv.destroyAllWindows() 
@@ -177,8 +180,9 @@ class LandmarkEditor:
         cv.namedWindow(window_name)
         cv.setMouseCallback(window_name, self.moving_crop_event)
         self.selected_roi_idx=-1
+ 
         while True:
-            img_display = self.image.copy()
+            img_display = self.ds_image.copy()
             # Draw all landmarks
             for i, (px, py, w, h) in enumerate(self.rois):
                 color = (0, 0, 255) if i == self.selected_roi_idx else (0, 255, 0)
@@ -195,7 +199,7 @@ class LandmarkEditor:
             elif key == ord('s'):
                 if self.selected_roi_idx != -1:
                     new_roi = cv.selectROI(window_name, img_display)
-                    self.rois[self.selected_roi_idx] = new_roi
+                    self.rois[self.selected_roi_idx] = np.array(new_roi)
                     cv.setMouseCallback(window_name, self.moving_crop_event)
                 
         cv.destroyAllWindows()
@@ -203,8 +207,11 @@ class LandmarkEditor:
     def run(self):
         self.select_points()
         self.move_points()
-        self.user_crop_image(ds=1)
+        self.user_crop_image()
         self.redo_crop()
+        
+        self.rois = [self.ds*np.array(roi) for roi in self.rois]
+        self.points = [self.ds*np.array(point) for point in self.points]
         
     def get_scale(self):
         point1 = self.points[0]
@@ -589,7 +596,7 @@ def preprocess_adult_steelhead(im_paths, measurement_dir="measurements", num_fis
             
     return rois, horiz_flips, vert_flips, bad_idxs
 
-def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements", num_fish=None, landmark_length=50, orientation_prompts=False):
+def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements", num_fish=None, landmark_length=50, orientation_prompts=False,ds=1):
         
     scales = []
     eye_rois = []
@@ -629,12 +636,11 @@ def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements",
                     
                 # copy = np.copy(image)
                 
-                ds = 1
                 img_copy=image.copy()
                 point_names=['scale pt 1', 'scale pt 2', 'dorsal', 'adipose', 'caudal', 'anal','pelvic', 'pectoral']
                 box_names = ['eyeball', 'head', 'fish']
                 radius=13
-                landmark_gui = LandmarkEditor(im_path, img_copy, [], point_names=point_names,box_names=box_names,radius=radius, landmark_length=landmark_length)
+                landmark_gui = LandmarkEditor(im_path, img_copy, [], point_names=point_names,box_names=box_names,radius=radius, landmark_length=landmark_length,ds=ds)
                 landmark_gui.run()
                 landmark_gui.get_scale()
                 

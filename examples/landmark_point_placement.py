@@ -178,7 +178,7 @@ def get_eye_landmarks(fish, landmark_points,ord=10):
 def get_head_landmarks(fish, landmark_points,ord=10):
     head_contour, head_box_bounds =compute_contour(fish.head_mask,ord=ord)
     width=head_box_bounds[2]-head_box_bounds[0]
-    print('width=',width)
+    # print('width=',width)
     signal = -head_contour[:,0]
     snout_peaks, properties = find_peaks(signal)
     peak_heights=signal[snout_peaks]
@@ -190,7 +190,7 @@ def get_head_landmarks(fish, landmark_points,ord=10):
         snout1 = head_contour[snout_peaks[0]]
         snout2 = head_contour[snout_peaks[1]]
         # print(snout1[0]/snout2[0])
-        print('snout-extrema check: ', np.abs(snout2[0]-snout1[0])/width)
+        # print('snout-extrema check: ', np.abs(snout2[0]-snout1[0])/width)
         
         # if two maxima occur with mouth closed, choose leftmost point
         if np.abs(snout2[0]-snout1[0])/width > 0.4: 
@@ -212,8 +212,8 @@ def get_head_landmarks(fish, landmark_points,ord=10):
     right_side_head_contour = head_contour[right_side_head_indices]
     top_of_head_pt = right_side_head_contour[np.argmin(right_side_head_contour[:,1])]
     bottom_of_head_pt = right_side_head_contour[np.argmax(right_side_head_contour[:,1])]
-    print('top of head point = ', top_of_head_pt)
-    print('bottom of head point = ', bottom_of_head_pt)
+    # print('top of head point = ', top_of_head_pt)
+    # print('bottom of head point = ', bottom_of_head_pt)
     
     landmark_points.append(snout_pt) # 15
     landmark_points.append(top_of_head_pt) # 16
