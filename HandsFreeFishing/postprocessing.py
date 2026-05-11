@@ -32,7 +32,7 @@ class LandmarkEditor_Post:
     def __init__(self, window_name, image, points, radius=10,ds=1,ss_ratio=2):   
         # meta screen data
         self.ds = ds 
-        self.ss_ratio=ss_ratio
+        self.ss_ratio = ss_ratio
         self.screen_width, self.screen_height = get_screen_size()
         self.window_width = self.ds*int(np.floor(self.screen_width/self.ss_ratio))
         self.window_height = self.ds*int(np.floor(self.screen_height/self.ss_ratio)) 
@@ -102,7 +102,7 @@ class LandmarkEditor_Post:
     def run(self):
         self.move_points()
   
-def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir):
+def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir,ss_ratio=2):
     
     for (idx,im_path) in enumerate(im_paths):
         dir, im_name, ext = splice_im_path(im_path)
@@ -111,7 +111,7 @@ def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir):
         radius = 13
         img=cv.imread(im_path)
         
-        landmark_post_gui = LandmarkEditor_Post('Draggable Landmarks',img,landmarks,radius=radius)
+        landmark_post_gui = LandmarkEditor_Post('Draggable Landmarks',img,landmarks,radius=radius,ss_ratio=2)
         landmark_post_gui.run()
         
         landmark_post_gui.points

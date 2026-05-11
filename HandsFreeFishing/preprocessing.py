@@ -10,7 +10,7 @@ class LandmarkEditor:
     def __init__(self, window_name, image, points,point_names=None, box_names = None, radius=10, landmark_length=50,ds=1,ss_ratio=2):   
         # meta screen data
         self.ds = ds 
-        self.ss_ratio
+        self.ss_ratio = ss_ratio
         self.screen_width, self.screen_height = get_screen_size()
         self.window_width = self.ds*int(np.floor(self.screen_width/self.ss_ratio))
         self.window_height = self.ds*int(np.floor(self.screen_height/self.ss_ratio)) 
@@ -600,7 +600,7 @@ def preprocess_adult_steelhead(im_paths, measurement_dir="measurements", num_fis
             
     return rois, horiz_flips, vert_flips, bad_idxs
 
-def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements", num_fish=None, landmark_length=50, orientation_prompts=False,ds=1):
+def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements", num_fish=None, landmark_length=50, orientation_prompts=False,ds=1,ss_ratio=2):
         
     scales = []
     eye_rois = []
@@ -644,7 +644,7 @@ def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements",
                 point_names=['scale pt 1', 'scale pt 2', 'dorsal', 'adipose', 'caudal', 'anal','pelvic', 'pectoral']
                 box_names = ['eyeball', 'head', 'fish']
                 radius=13
-                landmark_gui = LandmarkEditor(im_path, img_copy, [], point_names=point_names,box_names=box_names,radius=radius, landmark_length=landmark_length,ds=ds)
+                landmark_gui = LandmarkEditor(im_path, img_copy, [], point_names=point_names,box_names=box_names,radius=radius, landmark_length=landmark_length,ds=ds,ss_ratio=ss_ratio)
                 landmark_gui.run()
                 landmark_gui.get_scale()
                 
