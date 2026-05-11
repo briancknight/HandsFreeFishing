@@ -7,12 +7,13 @@ import cv2 as cv
 from screeninfo import get_monitors
 
 class LandmarkEditor:
-    def __init__(self, window_name, image, points,point_names=None, box_names = None, radius=10, landmark_length=50,ds=1):   
+    def __init__(self, window_name, image, points,point_names=None, box_names = None, radius=10, landmark_length=50,ds=1,ss_ratio=2):   
         # meta screen data
         self.ds = ds 
+        self.ss_ratio
         self.screen_width, self.screen_height = get_screen_size()
-        self.window_width = self.ds*int(np.floor(self.screen_width/4))
-        self.window_height = self.ds*int(np.floor(self.screen_height/4)) 
+        self.window_width = self.ds*int(np.floor(self.screen_width/self.ss_ratio))
+        self.window_height = self.ds*int(np.floor(self.screen_height/self.ss_ratio)) 
          
         # parameters
         self.fontsize = 1.5/self.ds

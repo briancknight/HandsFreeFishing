@@ -24,13 +24,18 @@ def update_landmark_image(image, dir_name,name='my_fish'):
     os.makedirs(os.path.join("landmark_point_images", dir_name+"_updated"), exist_ok=True)
     cv.imwrite(os.path.join("landmark_point_images", dir_name+"_updated",f'{name}_updated_land_mark_points.png'), image)
     
+def update_landmark_image(points, dir_name,name='my_fish'):
+    os.makedirs(os.path.join("landmark_point_data",dir_name+'_updated'), exist_ok=True)
+    np.save(os.path.join("landmark_point_data",dir_name+'_updated', f"{im_name}_landmark_points.npy"),landmark_post_gui.points)
+    
 class LandmarkEditor_Post:
-    def __init__(self, window_name, image, points, radius=10,ds=1):   
+    def __init__(self, window_name, image, points, radius=10,ds=1,ss_ratio=2):   
         # meta screen data
         self.ds = ds 
+        self.ss_ratio=ss_ratio
         self.screen_width, self.screen_height = get_screen_size()
-        self.window_width = self.ds*int(np.floor(self.screen_width/4))
-        self.window_height = self.ds*int(np.floor(self.screen_height/4)) 
+        self.window_width = self.ds*int(np.floor(self.screen_width/self.ss_ratio))
+        self.window_height = self.ds*int(np.floor(self.screen_height/self.ss_ratio)) 
          
         # parameters
         self.fontsize = 1.5/self.ds
@@ -112,6 +117,7 @@ def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir):
         landmark_post_gui.points
         
         update_landmark_image(landmark_post_gui.img_display, dir_name=dir_name,name=im_name)
+        update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name)
         os.makedirs(os.path.join("landmark_point_data",dir_name+'_updated'), exist_ok=True)
         np.save(os.path.join("landmark_point_data",dir_name+'_updated', f"{im_name}_landmark_points.npy"),landmark_post_gui.points)
 
