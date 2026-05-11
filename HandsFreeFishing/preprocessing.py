@@ -89,7 +89,8 @@ class LandmarkEditor:
     def select_points(self):
         # Setup OpenCV window and mouse callback
         window_name=f"{self.window_name}: PLACE LANDMARK POINTS"
-        cv.namedWindow(window_name)
+        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+        cv.resizeWindow(window_name, self.window_width, self.window_height)
         cv.setMouseCallback(window_name, self.mouse_callback_n_points)
         
         while len(self.points)<self.MAX_POINTS:
@@ -115,7 +116,8 @@ class LandmarkEditor:
         
     def move_points(self):
         window_name=f"{self.window_name}: ADJUST LANDMARK POINTS"
-        cv.namedWindow(window_name)
+        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+        cv.resizeWindow(window_name, self.window_width, self.window_height)
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
         while True:
@@ -177,7 +179,8 @@ class LandmarkEditor:
     
     def redo_crop(self):
         window_name=f"{self.window_name}: ADJUST BOUNDING BOXES"
-        cv.namedWindow(window_name)
+        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+        cv.resizeWindow(window_name, self.window_width, self.window_height)
         cv.setMouseCallback(window_name, self.moving_crop_event)
         self.selected_roi_idx=-1
  

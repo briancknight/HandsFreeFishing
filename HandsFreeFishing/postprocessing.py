@@ -69,7 +69,8 @@ class LandmarkEditor_Post:
 
     def move_points(self):
         window_name=f"{self.window_name}: ADJUST LANDMARK POINTS"
-        cv.namedWindow(window_name)
+        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+        cv.resizeWindow(window_name, self.window_width, self.window_height)
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
         while True:

@@ -10,17 +10,16 @@ is not included here.
 ***To install***: 
 
 - be sure to have at least Python >= 3.8 installed
-- in terminal navigate to the directory you'd like to place this project
+- in Terminal (Mac OS) or Command Prompt (Windows) navigate to the directory you'd like to place this project
+(Tutorial videos for beginners: Terminal https://youtu.be/aKRYQsKR46I?si=urOsa4b54UeR2Py5, Command Prompt: https://www.youtube.com/watch?v=MBBWVgE0ewk&t=114s)
 
-*FOR JUVENILE CHINOOK:*
 - run the following: 
+*FOR JUVENILE CHINOOK:*
     git clone https://github.com/briancknight/HandsFreeFishing.git
-
 *FOR ADULT STEELHEAD:*
-- run the following:
-    git clone https://github.com/briancknight/HandsFreeFishing/tree/adult_steelhead
+    git clone --branch adult_steelhead --single-branch https://github.com/briancknight/HandsFreeFishing/
     
-- navigate to the HandsFreeFishing directory
+- navigate to the HandsFreeFishing directory in a Terminal (Mac OS) or Command Prompt (Windows) window
 - create a python virtual environment by running the command:
     python -m venv myvenv
 - activate your new virtual environment:
@@ -41,14 +40,14 @@ for a fish facing left, right-side up, of good quality, you would type 0 then pr
 the data you just provided for this test image. These can be changed manually if you accidentally input the wrong orienation, for example.
 - in the command line, run:
     python run_small_example.py
-- this will take a minute or so to run; it is loading the model and instatiating it for the given image
+- this will take a minute or so to run; it is loading the model and instantiating it for the given image
 - You should now see a 'segmentations' folder in your examples directory; this should contains subfolders for each segmentation produced, generated from the images and the measurements taken in the preprocessing step
 
 ***Processing Adult Steelhead for morphometric analysis:***
 
 *PREPROCESSING:*
 - while in the examples folder, with your virtual environment activated, run:
-    python preprocess_LakeTaupu_example_fish.py
+    python preprocess_LakeTaupo_example_fish.py
 - Initial start up may take 20 seconds or so, then a window should pop up showing one of the images in the sushi/LakeTaupo_example_fish folder
 
 - POINT PLACEMENT:
@@ -62,11 +61,10 @@ the data you just provided for this test image. These can be changed manually if
 
 *RUNNING THE MAIN PROGRAM:*
 - still in the examples folder, with your virtual environment activated, run:
-    python run_LakeTaupu_example_fish.py
+    python run_LakeTaupo_example_fish.py
 - This will instantiate the segmentation model for the first time, so it may be slow initally, but then it will go through each example fish that has been preprocessed in the previous step
 
 *POSTPROCESSING:*
 - As a final step for the placement of morphometric landmarks, the user can manually inspect the automatically placed points and adjust them as necessary, similar to step 2 of the POINT PLACEMENT procedure during preprocessing. 
 - To run the post processing, run:
-    python post_process_landmark_points.py
-
+    python postprocess_landmark_points.py
