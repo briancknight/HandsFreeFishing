@@ -3,10 +3,6 @@ import cv2 as cv
 import numpy as np
 import pandas as pd
 from HandsFreeFishing import postprocess_landmark_points
-
-def update_landmark_image(image, landmark_points, dir_name,name='my_fish'):
-    os.makedirs(os.path.join("landmark_point_images", dir_name+"_updated"), exist_ok=True)
-    cv.imwrite(os.path.join("landmark_point_images", dir_name+"_updated",f'{name}_updated_land_mark_points.png'), image)
     
 # dir_name="subset"
 # spreadsheet_name="subset"
@@ -30,5 +26,10 @@ if dir_name=="subset": # read in data from spreadsheet
     im_paths = [os.path.join(raw_data_dir,im_name+'.jpeg') for im_name in im_names]
     landmark_point_paths = [os.path.join(landmark_data_dir,im_name+'_landmark_points.npy') for im_name in im_names]
 
+postprocess_landmark_points(im_paths, dir_name,landmark_data_dir,name_change='_updated', monitor_idx=0)
+""" if name_change='', running the postprocessing will overwrite previously computed landmark points with adjusted points,
+and similarly with the landmark point images
 
-postprocess_landmark_points(im_paths, dir_name,landmark_data_dir)
+monitor_idx should only be changed if a multiple monitor display is buing used, and should be adjusted by the user to place pop-up
+windows on the desired monitor
+"""

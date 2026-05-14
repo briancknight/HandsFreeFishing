@@ -5,13 +5,19 @@ import regex as re
 from tifffile import imread, imwrite
 import cv2 as cv
 from screeninfo import get_monitors
+import warnings
 
-def get_screen_size():
+def get_screen_size(): # returns width and height of primary monitor
     for m in get_monitors():
         if m.is_primary:
             screen_width = m.width
             screen_height = m.height
     return screen_width, screen_height
+
+def get_monitor(monitor_idx=0):
+    for (idx,m) in get_monitors():
+        if idx==monitor_idx:
+            return m
 
 def splice_im_path(image_path):
     image_path_split = os.path.split(image_path)
@@ -20,22 +26,36 @@ def splice_im_path(image_path):
     
     return dir, im_name, ext
 
-def update_landmark_image(image, dir_name,name='my_fish'):
-    os.makedirs(os.path.join("landmark_point_images", dir_name+"_updated"), exist_ok=True)
-    cv.imwrite(os.path.join("landmark_point_images", dir_name+"_updated",f'{name}_updated_land_mark_points.png'), image)
+def update_landmark_image(image, dir_name,name='my_fish',name_change=''):
+    if name_change=='':
+        print(f'\nOverwriting original landmark image for {name}')
+    os.makedirs(os.path.join("landmark_point_images", dir_name+name_change), exist_ok=True)
+    cv.imwrite(os.path.join("landmark_point_images", dir_name+name_change,f'{name}_landmark_points.png'), image)
+    
+def update_landmark_points(points, dir_name,name='my_fish',name_change=''):
+    if name_change=='':
+        print(f'Overwriting original landmark points for {name}\n')
+    os.makedirs(os.path.join("landmark_point_data", dir_name+name_change), exist_ok=True)
+    np.save(os.path.join("landmark_point_data", dir_name+name_change,f'{name}_landmark_points.npy'), points)
     
 # def update_landmark_image(points, dir_name,name='my_fish'):
 #     os.makedirs(os.path.join("landmark_point_data",dir_name+'_updated'), exist_ok=True)
 #     np.save(os.path.join("landmark_point_data",dir_name+'_updated', f"{im_name}_landmark_points.npy"),landmark_post_gui.points)
     
 class LandmarkEditor_Post:
-    def __init__(self, window_name, image, points, radius=10,ds=1,ss_ratio=2):   
+    def __init__(self, window_name, image, points, radius=10,ds=1,monitor_idx=0):   
         # meta screen data
         self.ds = ds 
-        self.ss_ratio = ss_ratio
-        self.screen_width, self.screen_height = get_screen_size()
-        self.window_width = self.ds*int(np.floor(self.screen_width/self.ss_ratio))
-        self.window_height = self.ds*int(np.floor(self.screen_height/self.ss_ratio)) 
+        monitors = get_monitors()
+        if monitor_idx > len(monitors) - 1:
+            warnings.warn('Monitor index is too large, defaulting to 0')
+            monitor_idx=0
+            
+        self.monitor_idx=monitor_idx
+        self.monitor=monitors[monitor_idx]
+        self.screen_width, self.screen_height = (self.monitor.width,self.monitor.height)
+        self.window_width = self.ds*int(self.screen_width)
+        self.window_height = self.ds*int(self.screen_height) 
          
         # parameters
         self.fontsize = 1.5/self.ds
@@ -74,8 +94,14 @@ class LandmarkEditor_Post:
 
     def move_points(self):
         window_name=f"{self.window_name}: ADJUST LANDMARK POINTS"
-        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-        cv.resizeWindow(window_name, self.window_width, self.window_height)
+        
+        if self.monitor_idx==0:
+            cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
+        else:
+            cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+            
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
         while True:
@@ -102,7 +128,7 @@ class LandmarkEditor_Post:
     def run(self):
         self.move_points()
   
-def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir,ss_ratio=2):
+def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir,name_change='_updated',monitor_idx=0):
     
     for (idx,im_path) in enumerate(im_paths):
         dir, im_name, ext = splice_im_path(im_path)
@@ -111,12 +137,13 @@ def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir,ss_ratio=2):
         radius = 13
         img=cv.imread(im_path)
         
-        landmark_post_gui = LandmarkEditor_Post('Draggable Landmarks',img,landmarks,radius=radius,ss_ratio=2)
+        landmark_post_gui = LandmarkEditor_Post('Draggable Landmarks',img,landmarks,radius=radius,monitor_idx=monitor_idx)
         landmark_post_gui.run()
         
         landmark_post_gui.points
         
-        update_landmark_image(landmark_post_gui.img_display, dir_name=dir_name,name=im_name)
+        update_landmark_image(landmark_post_gui.img_display, dir_name=dir_name,name=im_name,name_change=name_change)
+        update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name,name_change=name_change)
         # update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name)
         os.makedirs(os.path.join("landmark_point_data",dir_name+'_updated'), exist_ok=True)
         np.save(os.path.join("landmark_point_data",dir_name+'_updated', f"{im_name}_landmark_points.npy"),landmark_post_gui.points)

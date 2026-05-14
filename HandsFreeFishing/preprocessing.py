@@ -5,16 +5,31 @@ import regex as re
 from tifffile import imread, imwrite
 import cv2 as cv
 from screeninfo import get_monitors
+import warnings
 
+def get_screen_size():
+    for m in get_monitors():
+        if m.is_primary:
+            screen_width = m.width
+            screen_height = m.height
+    return screen_width, screen_height
+        
 class LandmarkEditor:
-    def __init__(self, window_name, image, points,point_names=None, box_names = None, radius=10, landmark_length=50,ds=1,ss_ratio=2):   
+    def __init__(self, window_name, image, points,point_names=None, box_names = None, radius=10, landmark_length=50,ds=1,monitor_idx=0):   
         # meta screen data
         self.ds = ds 
-        self.ss_ratio = ss_ratio
-        self.screen_width, self.screen_height = get_screen_size()
-        self.window_width = self.ds*int(np.floor(self.screen_width/self.ss_ratio))
-        self.window_height = self.ds*int(np.floor(self.screen_height/self.ss_ratio)) 
-         
+        monitors = get_monitors()
+        if monitor_idx > len(monitors) - 1:
+            warnings.warn('Monitor index is too large, defaulting to 0')
+            monitor_idx=0
+            
+        self.monitor_idx=monitor_idx
+        self.monitor=monitors[monitor_idx]
+        
+        self.screen_width, self.screen_height = (self.monitor.width,self.monitor.height)
+        self.window_width = self.ds*int(self.screen_width)
+        self.window_height = self.ds*int(self.screen_height) 
+        
         # parameters
         self.fontsize = 1.5/self.ds
         self.fontthickness = np.max([int(2/self.ds), 1])
@@ -90,8 +105,14 @@ class LandmarkEditor:
     def select_points(self):
         # Setup OpenCV window and mouse callback
         window_name=f"{self.window_name}: PLACE LANDMARK POINTS"
-        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-        cv.resizeWindow(window_name, self.window_width, self.window_height)
+        if self.monitor_idx==0:
+            cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
+        else:
+            cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+            
+        # cv.resizeWindow(window_name, self.window_width, self.window_height)
         cv.setMouseCallback(window_name, self.mouse_callback_n_points)
         
         while len(self.points)<self.MAX_POINTS:
@@ -117,8 +138,14 @@ class LandmarkEditor:
         
     def move_points(self):
         window_name=f"{self.window_name}: ADJUST LANDMARK POINTS"
-        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-        cv.resizeWindow(window_name, self.window_width, self.window_height)
+        
+        if self.monitor_idx==0:
+            cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
+        else:
+            cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+            
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
         while True:
@@ -148,8 +175,13 @@ class LandmarkEditor:
         # Display the image for user to select the region
 
         window_name = f"{self.window_name}: DRAW A BOUNDING BOX AROUND THE {self.box_names[0].upper()},{self.box_names[1].upper()}, {self.box_names[2].upper()}"
-        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-        cv.resizeWindow(window_name, self.window_width, self.window_height)
+        if self.monitor_idx==0:
+            cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
+        else:
+            cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+            
         self.rois = []
         img_display = self.ds_image.copy()
         
@@ -180,8 +212,13 @@ class LandmarkEditor:
     
     def redo_crop(self):
         window_name=f"{self.window_name}: ADJUST BOUNDING BOXES"
-        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-        cv.resizeWindow(window_name, self.window_width, self.window_height)
+        if self.monitor_idx==0:
+            cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
+        else:
+            cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+            
         cv.setMouseCallback(window_name, self.moving_crop_event)
         self.selected_roi_idx=-1
  
@@ -222,13 +259,6 @@ class LandmarkEditor:
         point2 = self.points[1]
         
         self.pixels_per_mm = np.round(np.linalg.norm(np.array(point1) - np.array(point2))/self.landmark_length,2)
- 
-def get_screen_size():
-    for m in get_monitors():
-        if m.is_primary:
-            screen_width = m.width
-            screen_height = m.height
-    return screen_width, screen_height
 
 def mouse_callback_n_points(event, x, y, flags, param):
     """
@@ -600,7 +630,7 @@ def preprocess_adult_steelhead(im_paths, measurement_dir="measurements", num_fis
             
     return rois, horiz_flips, vert_flips, bad_idxs
 
-def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements", num_fish=None, landmark_length=50, orientation_prompts=False,ds=1,ss_ratio=2):
+def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements", num_fish=None, landmark_length=50, orientation_prompts=False,ds=1,monitor_idx=0):
         
     scales = []
     eye_rois = []
@@ -644,7 +674,11 @@ def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements",
                 point_names=['scale pt 1', 'scale pt 2', 'dorsal', 'adipose', 'caudal', 'anal','pelvic', 'pectoral']
                 box_names = ['eyeball', 'head', 'fish']
                 radius=13
-                landmark_gui = LandmarkEditor(im_path, img_copy, [], point_names=point_names,box_names=box_names,radius=radius, landmark_length=landmark_length,ds=ds,ss_ratio=ss_ratio)
+                print(img_copy.shape)
+                landmark_gui = LandmarkEditor(im_path, img_copy, [], 
+                                              point_names=point_names,box_names=box_names,
+                                              radius=radius, landmark_length=landmark_length,ds=ds,
+                                              monitor_idx=monitor_idx)
                 landmark_gui.run()
                 landmark_gui.get_scale()
                 
