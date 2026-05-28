@@ -25,7 +25,7 @@ class LandmarkEditor:
             
         self.monitor_idx=monitor_idx
         self.monitor=monitors[monitor_idx]
-        
+        print(f"current monitor={self.monitor}")
         self.screen_width, self.screen_height = (self.monitor.width,self.monitor.height)
         self.window_width = self.ds*int(self.screen_width)
         self.window_height = self.ds*int(self.screen_height) 
@@ -105,12 +105,12 @@ class LandmarkEditor:
     def select_points(self):
         # Setup OpenCV window and mouse callback
         window_name=f"{self.window_name}: PLACE LANDMARK POINTS"
-        if self.monitor_idx==0:
+        if self.monitor.is_primary:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
-            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+            cv.moveWindow(window_name, self.monitor.x, 0)
+            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
             
         # cv.resizeWindow(window_name, self.window_width, self.window_height)
         cv.setMouseCallback(window_name, self.mouse_callback_n_points)
@@ -139,12 +139,12 @@ class LandmarkEditor:
     def move_points(self):
         window_name=f"{self.window_name}: ADJUST LANDMARK POINTS"
         
-        if self.monitor_idx==0:
+        if self.monitor.is_primary:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
-            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+            cv.moveWindow(window_name, self.monitor.x, 0)
+            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
             
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
@@ -173,14 +173,14 @@ class LandmarkEditor:
         """Gathers bounding box from an image based on user-selected region."""
 
         # Display the image for user to select the region
-
         window_name = f"{self.window_name}: DRAW A BOUNDING BOX AROUND THE {self.box_names[0].upper()},{self.box_names[1].upper()}, {self.box_names[2].upper()}"
-        if self.monitor_idx==0:
+        
+        if self.monitor.is_primary:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
-            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+            cv.moveWindow(window_name, self.monitor.x, 0)
+            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
             
         self.rois = []
         img_display = self.ds_image.copy()
@@ -212,13 +212,13 @@ class LandmarkEditor:
     
     def redo_crop(self):
         window_name=f"{self.window_name}: ADJUST BOUNDING BOXES"
-        if self.monitor_idx==0:
+        if self.monitor.is_primary:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
-            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
-            
+            cv.moveWindow(window_name, self.monitor.x, 0)
+            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
+        
         cv.setMouseCallback(window_name, self.moving_crop_event)
         self.selected_roi_idx=-1
  
@@ -630,7 +630,7 @@ def preprocess_adult_steelhead(im_paths, measurement_dir="measurements", num_fis
             
     return rois, horiz_flips, vert_flips, bad_idxs
 
-def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements", num_fish=None, landmark_length=50, orientation_prompts=False,ds=1,monitor_idx=0):
+def preprocess_adult_steelhead_updated(im_paths, exts, measurement_dir="measurements", num_fish=None, landmark_length=50, orientation_prompts=False,ds=1,monitor_idx=0):
         
     scales = []
     eye_rois = []
@@ -641,35 +641,37 @@ def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements",
     qualities = []
     bad_idxs = []
     
-    if num_fish is None:
-        num_fish=[1]*len(im_paths)
         
     for (i, im_path) in enumerate(im_paths):
         
         print(im_path)
-        dir, im_name, ext = splice_im_path(im_path)
         
-        if num_fish[i]>1:
-            idx = re.search(ext, im_path).start()
-            new_im_path = im_path[:idx-2]+im_path[idx:] # remove excess labeling
+        found_im_path=False
+        for ext in exts:
+            im_path_temp=im_path+ext
+            if os.path.exists(im_path_temp):
+                im_path = im_path_temp
+                found_im_path=True
+                break
+            
+        if not found_im_path:
+            print(f"Failed to find image path: {im_path}")
+            bad_idxs.append(i)
+            scales.append(None)
+            rois.append(None)
+            horiz_flips.append(None)
+            vert_flips.append(None)
+            qualities.append(None)
         else:
-            new_im_path = im_path
-            
-        if os.path.exists(new_im_path):
-            
+            dir, im_name, ext = splice_im_path(im_path)            
             if os.path.exists(os.path.join(measurement_dir, dir, im_name + '.csv')):
                 pass # don't overwrite
             else:
                 print('\nmade it!\n')
                 print(im_path)
-                if num_fish[i]>1:
-                    idx = re.search(ext, im_path).start()
-                    image=cv.imread(new_im_path) # remove excess labeling
-                else:
-                    image=cv.imread(im_path)
-                    
-                # copy = np.copy(image)
-                
+
+                image=cv.imread(im_path)
+                                    
                 img_copy=image.copy()
                 point_names=['scale pt 1', 'scale pt 2', 'dorsal', 'adipose', 'caudal', 'anal','pelvic', 'pectoral']
                 box_names = ['eyeball', 'head', 'fish']
@@ -728,16 +730,7 @@ def preprocess_adult_steelhead_updated(im_paths, measurement_dir="measurements",
                 with open(os.path.join(measurement_dir, dir, im_name+'.csv'), 'w', newline='') as myfile:
                     wr = csv.writer(myfile)
                     wr.writerow([1/pixels_per_mm, eye_roi, head_roi, roi, horiz_flip, vertical_flip, quality])
-                    
-
-            
-        else:
-            bad_idxs.append(i)
-            scales.append(None)
-            rois.append(None)
-            horiz_flips.append(None)
-            vert_flips.append(None)
-            qualities.append(None)
+        
             
     return rois, horiz_flips, vert_flips, bad_idxs
 

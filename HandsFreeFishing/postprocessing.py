@@ -53,6 +53,7 @@ class LandmarkEditor_Post:
             
         self.monitor_idx=monitor_idx
         self.monitor=monitors[monitor_idx]
+        print(f"current monitor={self.monitor}")
         self.screen_width, self.screen_height = (self.monitor.width,self.monitor.height)
         self.window_width = self.ds*int(self.screen_width)
         self.window_height = self.ds*int(self.screen_height) 
@@ -90,18 +91,24 @@ class LandmarkEditor_Post:
         # 4. Add additional points by right clicking   
         elif event == cv.EVENT_FLAG_RBUTTON:
             pt=[x,y]
-            self.points = np.append(self.points,[pt],axis=0)
+            try:
+                self.points = np.append(self.points,[pt],axis=0)
+            except ValueError:
+                self.points=[pt]
 
     def move_points(self):
         window_name=f"{self.window_name}: ADJUST LANDMARK POINTS"
         
-        if self.monitor_idx==0:
+        if self.monitor.is_primary:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, self.monitor.y)
-            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
-            
+            cv.moveWindow(window_name, self.monitor.x, 0)
+            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+        # cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+        # cv.moveWindow(window_name, self.monitor.width, 0)
+        # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)    
+        
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
         while True:
@@ -128,25 +135,44 @@ class LandmarkEditor_Post:
     def run(self):
         self.move_points()
   
-def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir,name_change='_updated',monitor_idx=0):
+def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir,name_change='_updated',monitor_idx=0, exts=['.jpg','.jpeg','.png']):
     
     for (idx,im_path) in enumerate(im_paths):
-        dir, im_name, ext = splice_im_path(im_path)
-        landmark_point_path = os.path.join(landmark_data_dir,im_name+'_landmark_points.npy')
-        landmarks = np.load(landmark_point_path,allow_pickle=True)
-        radius = 13
-        img=cv.imread(im_path)
         
-        landmark_post_gui = LandmarkEditor_Post('Draggable Landmarks',img,landmarks,radius=radius,monitor_idx=monitor_idx)
-        landmark_post_gui.run()
+        found_im_path=False
+        for ext in exts:
+            im_path_temp=im_path+ext
+            if os.path.exists(im_path_temp):
+                im_path = im_path_temp
+                found_im_path=True
+                break
         
-        landmark_post_gui.points
-        
-        update_landmark_image(landmark_post_gui.img_display, dir_name=dir_name,name=im_name,name_change=name_change)
-        update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name,name_change=name_change)
-        # update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name)
-        os.makedirs(os.path.join("landmark_point_data",dir_name+'_updated'), exist_ok=True)
-        np.save(os.path.join("landmark_point_data",dir_name+'_updated', f"{im_name}_landmark_points.npy"),landmark_post_gui.points)
+        if not found_im_path:
+            print(f"Failed to find image path: {im_path}")
+
+        else:
+            
+            dir, im_name, ext = splice_im_path(im_path)
+            landmark_point_path = os.path.join(landmark_data_dir,im_name+'_landmark_points.npy')
+            if os.path.exists(landmark_point_path):
+                landmarks = np.load(landmark_point_path,allow_pickle=True)
+            else:
+                print(f"No landmark points found for: {im_path}, please manually place points instead")
+                landmarks = []
+            
+            radius = 13
+            img=cv.imread(im_path)
+            
+            landmark_post_gui = LandmarkEditor_Post('Draggable Landmarks',img,landmarks,radius=radius,monitor_idx=monitor_idx)
+            landmark_post_gui.run()
+            
+            landmark_post_gui.points
+            
+            update_landmark_image(landmark_post_gui.img_display, dir_name=dir_name,name=im_name,name_change=name_change)
+            update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name,name_change=name_change)
+            # update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name)
+            os.makedirs(os.path.join("landmark_point_data",dir_name+'_updated'), exist_ok=True)
+            np.save(os.path.join("landmark_point_data",dir_name+'_updated', f"{im_name}_landmark_points.npy"),landmark_post_gui.points)
 
         
 if __name__=='__main__':

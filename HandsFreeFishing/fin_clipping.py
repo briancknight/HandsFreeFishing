@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import os
 import csv
@@ -230,12 +231,8 @@ def rotate_image(image, angle, center_point=None):
 # fish class, segments fish, fins, eyeball & computes a FL & (predicted) non-fin area
 class fish:
     
-    def __init__(self, image_path, predictor, write_masks = True, mask_ext = '.png', fins_to_clip = None, scale=None, num_fish=None, n_steps = 2, n_partitions=5, ord=100, verbose=False):
+    def __init__(self, image_path, predictor, write_masks = True, possible_exts = ['.jpg', '.jpeg', '.png'], mask_ext = '.png', fins_to_clip = None, scale=None, num_fish=None, n_steps = 2, n_partitions=5, ord=100, verbose=False):
         
-        self.im_path = image_path
-        image_path_split = os.path.split(self.im_path)
-        self.dir = os.path.split(image_path_split[0])[1]
-        self.im_name, self.ext = os.path.splitext(image_path_split[1])
         self.mask_ext = mask_ext
         self.predictor = predictor
         self.scale=scale
@@ -252,6 +249,32 @@ class fish:
                                 'anal':False,'pelvic':False, 'pectoral':False}
             for fin in fins_to_clip:
                 self.included_fins[fin.lower()] = True
+                
+        image_path_split = os.path.split(image_path)
+        self.dir = os.path.split(image_path_split[0])[1]
+        self.im_name, _ = os.path.splitext(image_path_split[1])
+        # read in image if it exists, and set initialize SAM
+        tmp_img=None
+        for ext in possible_exts:
+            tmp_im_path = image_path + ext
+            print(tmp_im_path)
+            if os.path.exists(tmp_im_path):
+                tmp_img = cv.imread(tmp_im_path)
+                self.im_path = tmp_im_path
+                tmp_img = apply_clahe(tmp_img)
+                self.image = cv.cvtColor(tmp_img, cv.COLOR_BGR2RGB)
+                break
+            
+        if tmp_img is None:
+            print(f"Failed to find image path: {image_path}")
+            self.can_run=False
+            return
+        else:
+            print(f"Found image path: {self.im_path}")
+            self.can_run=True
+            
+        image_path_split = os.path.split(self.im_path)
+        self.im_name, self.ext = os.path.splitext(image_path_split[1])
             
         # for images with multiple fish
         if num_fish is None:
@@ -260,15 +283,6 @@ class fish:
             idx = re.search(self.ext, self.im_path).start()
             new_im_path = self.im_path[:idx-2]+self.im_path[idx:]
             self.im_path = new_im_path
-        
-        # read in image and set initialize SAM
-        tmp_img = cv.imread(self.im_path)
-
-        if tmp_img is None:
-            raise FileNotFoundError(f"Failed to find image path: {self.im_path}")
-        else:
-            tmp_img = apply_clahe(tmp_img)
-            self.image = cv.cvtColor(tmp_img, cv.COLOR_BGR2RGB)
             
         self.copy = np.copy(self.image)
         self.dims = np.shape(self.image[:,:,0])
@@ -338,6 +352,14 @@ class fish:
             self.fish_mask = cv.imread(fish_mask_path)[:,:,0] == 255
         else:
             self.predictor.set_image(self.image)
+            
+            if hasattr(self,'fin_points'):
+                print('using existing fin points for better segmentation')
+                point_coords=self.fin_points
+                point_labels=[1]*len(self.fin_points)
+            else:
+                point_coords=None
+                point_labels=None
 
             # self.prediction_box = np.array([roi[0],roi[1],roi[0]+roi[2], roi[1]+roi[3]])
             shift = 5/self.scale # 5 mm worth of shift
@@ -348,7 +370,7 @@ class fish:
                         
             for (i,pred_box) in enumerate(pred_boxes):
                 # fish_masks,q,o = self.predictor.predict(box=pred_box, multimask_output=True)
-                fish_mask = self.predictor.predict(box=pred_box, multimask_output=False)
+                fish_mask = self.predictor.predict(point_coords=point_coords,point_labels=point_labels,box=pred_box, multimask_output=False)
                 if i == 0: # initialize current_mask
                     current_mask = fish_mask[0][0]
                 else: # intersect with previous prediction
@@ -360,7 +382,9 @@ class fish:
 
         self.fish_mask =  get_largest_connected_component((self.fish_mask*255).astype(np.uint8))*255
         self.fish_mask_full = np.copy(self.fish_mask)
-                
+        
+        
+        
         # flip as needed:
         if self.horiz_flip =='1':
             if self.verbose:
@@ -677,7 +701,7 @@ class fish:
             if score > top_score:
                 top_score=score
                 current_mask = mask[0]
-        
+            
         return get_largest_connected_component((current_mask*255).astype(np.uint8))*255, top_score #get_largest_connected_component(best_mask)*255
     
     def get_mask(self, box):
@@ -750,13 +774,14 @@ class fish:
         self.full_segmentation = np.stack([self.fish_mask_full, np.zeros_like(self.fish_mask_full), np.zeros_like(self.fish_mask_full)], axis=-1).astype(np.uint8)
         # self.full_segmentation = self.fish_mask_full
         self.no_fin_segmentation = self.fish_mask_full
-        
+        cv.imwrite(f"38_2025_fish_mask_mull_755.png",self.fish_mask_full*255)
         masks = self.get_fin_masks()
         
         for (i,mask) in enumerate(masks):
             
             # creating a rough label image
             demask = (mask==0)
+            cv.imwrite(f"38_2025_demask_{i}.png",demask*255)
             self.full_segmentation *= np.stack([demask, demask, demask], axis=-1)
             self.full_segmentation[:,:,1] +=  mask
             
@@ -779,6 +804,7 @@ class fish:
     def filet_fish(self,n_steps=6, ord=10):
     
         nf_mask = self.no_fin_segmentation.copy()
+        cv.imwrite(f"38_2025_nf_mask.png",nf_mask*255)
         if self.horiz_flip =='1':
             if self.verbose:
                 print('flipped horizontally')
@@ -1257,35 +1283,40 @@ class fish:
         
     def run(self):
         
-        print('\nfor: ', self.im_path)
-        
-        self.check_freezer()
-            
-        if self.frozen:
-            self.re_run()
-        
+        if not self.can_run:
+            print("Filename not found, cannot run program")
+            return 
         else:
-            self.get_measurements()
-            self.get_scale(ds=1)
-            self.segment_fish()
-        
-            if self.degenerate:
-                print('degenerate!\n')
-                self.no_fin_area=None
-                self.FL = None
-                self.area = None
-                self.sector_areas=[None]*(2*self.n_steps)
-                self.line_lengths=[None]*(2*self.n_steps)
-                self.major_axis = None
-                self.minor_axis = None
-            else: 
-                self.level_fish()
-                self.get_fin_clips()
-                self.get_full_segmentations()
-                self.get_no_fin_area()
-                self.filet_fish(n_steps=self.n_steps,ord=self.ord)
-                self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
-                self.get_eye_diameter()
+            
+            print('\nfor: ', self.im_path)
+            
+            self.check_freezer()
+                
+            if self.frozen:
+                self.re_run()
+            
+            else:
+                self.get_measurements()
+                self.get_scale(ds=1)
+                self.segment_fish()
+            
+                if self.degenerate:
+                    print('degenerate!\n')
+                    self.no_fin_area=None
+                    self.FL = None
+                    self.area = None
+                    self.sector_areas=[None]*(2*self.n_steps)
+                    self.line_lengths=[None]*(2*self.n_steps)
+                    self.major_axis = None
+                    self.minor_axis = None
+                else: 
+                    self.level_fish()
+                    self.get_fin_clips()
+                    self.get_full_segmentations()
+                    self.get_no_fin_area()
+                    self.filet_fish(n_steps=self.n_steps,ord=self.ord)
+                    self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
+                    self.get_eye_diameter()
             
     def re_run(self):
         
@@ -1323,8 +1354,8 @@ class juvenile_steelhead(fish):
         super().__init__(image_path, predictor, write_masks, mask_ext, fins_to_clip, scale, num_fish, n_steps, n_partitions, ord, verbose)
     
 class adult_stealhead(fish):
-    def __init__(self, image_path, predictor, write_masks=True, mask_ext='.png', fins_to_clip=None, scale=None, num_fish=None, n_steps=2, n_partitions=5, ord=100, verbose=False):
-        super().__init__(image_path, predictor, write_masks, mask_ext, fins_to_clip, scale, num_fish, n_steps, n_partitions, ord, verbose)
+    def __init__(self, image_path, predictor, write_masks=True, possible_exts = ['.jpg', '.jpeg', '.png'], mask_ext='.png', fins_to_clip=None, scale=None, num_fish=None, n_steps=2, n_partitions=5, ord=100, verbose=False):
+        super().__init__(image_path, predictor, write_masks, possible_exts, mask_ext, fins_to_clip, scale, num_fish, n_steps, n_partitions, ord, verbose)
 
     def get_measurements(self):
         # read in ROI and orienation data from csv, *or ask user for input* (*TODO)
@@ -1394,7 +1425,7 @@ class adult_stealhead(fish):
         if os.path.exists(measurement_path):
             pass
         else:
-            raise Exception('Preprocessing data is unavailable, please run the preprocessing script first.')
+            warnings.warn('Preprocessing data is unavailable, please run the preprocessing script first.')
         
         initial_seg_path = os.path.join('segmentations', self.dir, 'initial_masks', 'initial_mask_' + self.im_name + self.mask_ext)
         nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_masks', 'no_fin_mask_' + self.im_name + self.mask_ext)
@@ -1851,6 +1882,14 @@ class adult_stealhead(fish):
                     
         self.adipose_box = self.get_box(x_vals, y_vals)
     
+    def get_centered_box(self, point, ratios):
+        (rx,ry)=ratios
+        (x,y) = point
+        dx=rx/self.scale
+        dy=ry/self.scale
+        box = np.array([x - dx, y - dy, x + dx, y + dy])
+        return box
+    
     def load_fin_points(self):
         if not hasattr(self, "fin_points"):
             fin_points_path = os.path.join('measurements', self.dir, self.im_name+'_fin_points.npy')
@@ -1879,20 +1918,32 @@ class adult_stealhead(fish):
     def get_fin_clips(self):
         fin_points_path = os.path.join('measurements', self.dir, self.im_name+'_fin_points.npy')
         if os.path.exists(fin_points_path):
-            self.fin_points = np.load(fin_points_path)
             self.load_fin_points()
             
-            dorsal_mask, dorsal_score,_ = self.predictor.predict(point_coords=self.dorsal_point, point_labels=np.array([1]), multimask_output=False)
+            dorsal_box=self.get_centered_box(self.dorsal_point[0], ratios=(30, 20))
+            dorsal_mask, dorsal_score,_ = self.predictor.predict(point_coords=self.dorsal_point, point_labels=np.array([1]), box=dorsal_box[None,:], multimask_output=False)
             self.dorsal_mask = dorsal_mask[0]
-            adipose_mask, adipose_score,_ = self.predictor.predict(point_coords=self.adipose_point, point_labels=np.array([1]), multimask_output=False)
+            
+            adipose_box=self.get_centered_box(self.adipose_point[0], ratios=(15, 15))
+            adipose_mask, adipose_score,_ = self.predictor.predict(point_coords=self.adipose_point, point_labels=np.array([1]), box=adipose_box[None,:], multimask_output=False)
             self.adipose_mask = adipose_mask[0]
-            caudal_mask, caudal_score,_ = self.predictor.predict(point_coords=self.caudal_point, point_labels=np.array([1]), multimask_output=False)
+            
+            cx,cy=self.caudal_point[0]
+            # add additional caudal points to help segment entire fin (can be challenging when there is a split in the fin)
+            caudal_points = np.copy(self.caudal_point)
+            caudal_points = np.array([self.caudal_point[0], [cx, cy + 10/self.scale], [cx, cy + 10/self.scale]])
+            caudal_mask, caudal_score,_ = self.predictor.predict(point_coords=caudal_points, point_labels=np.array([1,1,1]), multimask_output=False)
             self.caudal_mask = caudal_mask[0]
+            
             anal_mask, anal_score,_ = self.predictor.predict(point_coords=self.anal_point, point_labels=np.array([1]), multimask_output=False)
             self.anal_mask = anal_mask[0]
-            pelvic_mask, pelvic_score,_ = self.predictor.predict(point_coords=self.pelvic_point, point_labels=np.array([1]), multimask_output=False)
+            
+            pelvic_box=self.get_centered_box(self.pelvic_point[0], ratios=(30, 20))
+            pelvic_mask, pelvic_score,_ = self.predictor.predict(point_coords=self.pelvic_point, point_labels=np.array([1]), box=pelvic_box[None,:], multimask_output=False)
             self.pelvic_mask = pelvic_mask[0]
-            pectoral_mask, pectoral_score,_ = self.predictor.predict(point_coords=self.pectoral_point, point_labels=np.array([1]), multimask_output=False)
+            
+            pectoral_box=self.get_centered_box(self.pectoral_point[0], ratios=(30, 15))
+            pectoral_mask, pectoral_score,_ = self.predictor.predict(point_coords=self.pectoral_point, point_labels=np.array([1]), box=pectoral_box[None,:], multimask_output=False)
             self.pectoral_mask = pectoral_mask[0]
             
             self.get_eye_box(1/15)  
@@ -1948,35 +1999,41 @@ class adult_stealhead(fish):
     
     def run(self):
         
-        print('\nfor: ', self.im_path)
-        
-        self.check_freezer()
-            
-        if self.frozen:
-            self.re_run()
+        if not self.can_run: # file name not found, cannot run program
+            return
         
         else:
-            self.get_measurements()
-            self.get_scale(ds=1)
-            self.segment_fish()
-        
-            if self.degenerate:
-                print('degenerate!\n')
-                self.no_fin_area=None
-                self.FL = None
-                self.area = None
-                self.sector_areas=[None]*(2*self.n_steps)
-                self.line_lengths=[None]*(2*self.n_steps)
-                self.major_axis = None
-                self.minor_axis = None
-            else: 
-                self.level_fish()
-                self.get_fin_clips()
-                self.get_full_segmentations()
-                self.get_no_fin_area(convex_hull_correction=False)
-                self.filet_fish(n_steps=self.n_steps,ord=self.ord)
-                self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
-                self.get_eye_diameter()
+             
+            print('\nfor: ', self.im_path)
+            
+            self.check_freezer()
+                
+            if self.frozen:
+                self.re_run()
+            
+            else:
+                self.get_measurements()
+                self.get_scale(ds=1)
+                self.load_fin_points()
+                self.segment_fish()
+            
+                if self.degenerate:
+                    print('degenerate!\n')
+                    self.no_fin_area=None
+                    self.FL = None
+                    self.area = None
+                    self.sector_areas=[None]*(2*self.n_steps)
+                    self.line_lengths=[None]*(2*self.n_steps)
+                    self.major_axis = None
+                    self.minor_axis = None
+                else: 
+                    self.level_fish()
+                    self.get_fin_clips()
+                    self.get_full_segmentations()
+                    self.get_no_fin_area(convex_hull_correction=False)
+                    self.filet_fish(n_steps=self.n_steps,ord=self.ord)
+                    self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
+                    self.get_eye_diameter()
             
     def re_run(self):
         
