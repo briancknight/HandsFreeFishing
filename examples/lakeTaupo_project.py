@@ -21,13 +21,14 @@ parser.add_argument('-d', '--delete', type=str, default=None, help='delete all d
 parser.add_argument('-p', '--preprocess', default = False, action=argparse.BooleanOptionalAction, help='Initiate preprocessing (default: True)')
 parser.add_argument('-r', '--run', default=False, action=argparse.BooleanOptionalAction, help='Initiate automated segmentation (default: True)')
 parser.add_argument('-o', '--postprocess', default=False, action=argparse.BooleanOptionalAction, help='Initiate postprocessing default: True)')
+parser.add_argument('-t', '--tps', default=False, action=argparse.BooleanOptionalAction, help='Create tps file from landmark point npy files: True)')
 parser.add_argument('-m', '--monitor', type=int, default=0, help='Index of monitor to be used for image displays')
 
 args = parser.parse_args()
 
 
 # Example lines:
-# python lakeTaupo_project -s 5_2024 -p -r -o (equivalent to: python lakeTaupo_project --single-fish 5_2024 -preprocess -run -postprocess)
+# python lakeTaupo_project -s 5_2024 -p -r -o (equivalent to: python lakeTaupo_project --single-fish 5_2024 --preprocess --run --postprocess)
 # python lakeTaupo_project -d 5_2024 
 
 if __name__ == "__main__":
@@ -42,6 +43,8 @@ if __name__ == "__main__":
     im_names=[os.path.join(f"{i}_2024") for i in nums]
     im_paths = [os.path.join(dir_name, id) for id in im_names]  
     exts = ['.jpg', '.jpeg'] # possible image extensions
+    
+    name_change=''
     
     if args.single_fish is not None:
         # overwrite to process the specific image
@@ -85,5 +88,11 @@ if __name__ == "__main__":
         """
         from HandsFreeFishing import postprocess_landmark_points
         landmark_data_dir = os.path.join("landmark_point_data", project_name)
-        postprocess_landmark_points(im_paths, project_name, landmark_data_dir, name_change='',monitor_idx=args.monitor)
+        postprocess_landmark_points(im_paths, project_name, landmark_data_dir, name_change=name_change,monitor_idx=args.monitor)
+        
+    if args.tps:
+        from landmark_points_to_tps import generate_tps_file
+        generate_tps_file(im_paths, name_change=name_change, landmark_data_dir='landmark_point_data')
+        
+        
                 
