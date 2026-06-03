@@ -17,6 +17,7 @@ def get_paths_to_delete(project_name, im_name):
 parser = argparse.ArgumentParser("HandsFreeFishing project")
 # parser.add_argument('--project_name', type=str, default="LakeTaupo_example_fish", help='Name of project directory')
 parser.add_argument('-s', '--single-fish', type=str, default=None, help="specify a single image name to run")
+parser.add_argument('-c', '--cont', type=str, default=None, help="continue processing at a given image name")
 parser.add_argument('-d', '--delete', type=str, default=None, help='delete all data corresponding to a given image name')
 parser.add_argument('-p', '--preprocess', default = False, action=argparse.BooleanOptionalAction, help='Initiate preprocessing (default: True)')
 parser.add_argument('-r', '--run', default=False, action=argparse.BooleanOptionalAction, help='Initiate automated segmentation (default: True)')
@@ -50,6 +51,12 @@ if __name__ == "__main__":
         # overwrite to process the specific image
         im_names = [args.single_fish]
         im_paths = [os.path.join(dir_name, args.single_fish)]
+    
+    if args.cont is not None:
+        # continue processing starting with a given fish id
+        idx = im_names.index(args.cont)
+        im_names=im_names[idx:]
+        im_paths=im_paths[idx:]
         
     if args.delete is not None:
         paths=get_paths_to_delete(project_name, args.delete)
