@@ -21,24 +21,25 @@ def generate_tps_file(im_paths, name_change='',landmark_data_dir='landmark_point
         if len(found_files)>=1:
             ext = os.path.splitext(found_files[0])[1]
             # 1. Define landmarks (x, y coordinates)
-            points = TPSPoints(np.load(point_path))
-            # 2. Create a curve from those points
-            curve = TPSCurve(points)
+            if os.path.exists(point_path):
+                points = TPSPoints(np.load(point_path))
+                # 2. Create a curve from those points
+                curve = TPSCurve(points)
 
-            with open(measurement_paths[i], newline='') as csvfile:
-                        reader=csv.reader(csvfile, delimiter=',')
-                        for (j,row) in enumerate(reader):
-                            if j==0:
-                                scale = row[0]
-            # 3. Create an image entry with landmarks, curves, and metadata
-            image = TPSImage(im_names[i]+ext, 
-                landmarks=points, 
-                id_number=i, 
-                comment=f"comment for fish {im_names[i]}", 
-                scale=scale
-            )
+                with open(measurement_paths[i], newline='') as csvfile:
+                            reader=csv.reader(csvfile, delimiter=',')
+                            for (j,row) in enumerate(reader):
+                                if j==0:
+                                    scale = row[0]
+                # 3. Create an image entry with landmarks, curves, and metadata
+                image = TPSImage(im_names[i]+ext, 
+                    landmarks=points, 
+                    id_number=i, 
+                    comment=f"comment for fish {im_names[i]}", 
+                    scale=scale
+                )
 
-            tps_images.append(image)
+                tps_images.append(image)
     # 4. Construct the TPS object
     tps_file = TPSFile(tps_images)
 
