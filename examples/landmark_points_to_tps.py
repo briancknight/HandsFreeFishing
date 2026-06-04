@@ -34,7 +34,7 @@ def generate_tps_file(im_paths, name_change='',landmark_data_dir='landmark_point
                 # 3. Create an image entry with landmarks, curves, and metadata
                 image = TPSImage(im_names[i]+ext, 
                     landmarks=points, 
-                    id_number=i, 
+                    id_number=os.path.splitext(im_names[i])[0], 
                     comment=f"comment for fish {im_names[i]}", 
                     scale=scale
                 )
