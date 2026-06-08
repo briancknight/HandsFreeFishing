@@ -10,7 +10,7 @@ def generate_tps_file(im_paths, name_change='',landmark_data_dir='landmark_point
     
     project_name= os.path.split(os.path.split(im_paths[0])[0])[1]
     im_names=[os.path.split(im_path)[1] for im_path in im_paths]
-    landmark_point_paths = [os.path.join(landmark_data_dir, project_name, im_name+'_landmark_points.npy') for im_name in im_names]
+    landmark_point_paths = [os.path.join(landmark_data_dir, project_name+name_change, im_name+'_landmark_points.npy') for im_name in im_names]
     measurement_paths = [os.path.join(measurement_data_dir, project_name, im_name+'.csv') for im_name in im_names]
     os.makedirs('TPS_data', exist_ok=True)
     tps_images=[]
@@ -35,7 +35,7 @@ def generate_tps_file(im_paths, name_change='',landmark_data_dir='landmark_point
                 image = TPSImage(im_names[i]+ext, 
                     landmarks=points, 
                     id_number=os.path.splitext(im_names[i])[0], 
-                    comment=f"comment for fish {im_names[i]}", 
+                    comment=f"data path: {landmark_point_paths[i]}", 
                     scale=scale
                 )
 

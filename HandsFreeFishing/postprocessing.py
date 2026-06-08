@@ -103,11 +103,8 @@ class LandmarkEditor_Post:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, 0)
-            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
-        # cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-        # cv.moveWindow(window_name, self.monitor.width, 0)
-        # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)    
+            cv.moveWindow(window_name, self.monitor.x-1, self.monitor.y-1)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
         
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
@@ -129,7 +126,7 @@ class LandmarkEditor_Post:
                 break
             elif key == ord('s'):
                 print("Current Landmark Points:", self.points)
-
+                
         cv.destroyAllWindows()
          
     def run(self):
@@ -170,9 +167,6 @@ def postprocess_landmark_points(im_paths,dir_name,landmark_data_dir,name_change=
             
             update_landmark_image(landmark_post_gui.img_display, dir_name=dir_name,name=im_name,name_change=name_change)
             update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name,name_change=name_change)
-            # update_landmark_points(landmark_post_gui.points, dir_name=dir_name, name=im_name)
-            os.makedirs(os.path.join("landmark_point_data",dir_name+'_updated'), exist_ok=True)
-            np.save(os.path.join("landmark_point_data",dir_name+'_updated', f"{im_name}_landmark_points.npy"),landmark_post_gui.points)
 
         
 if __name__=='__main__':

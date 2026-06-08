@@ -24,6 +24,7 @@ parser.add_argument('-r', '--run', default=False, action=argparse.BooleanOptiona
 parser.add_argument('-o', '--postprocess', default=False, action=argparse.BooleanOptionalAction, help='Initiate postprocessing default: True)')
 parser.add_argument('-t', '--tps', default=False, action=argparse.BooleanOptionalAction, help='Create tps file from landmark point npy files: True)')
 parser.add_argument('-m', '--monitor', type=int, default=0, help='Index of monitor to be used for image displays')
+parser.add_argument('-nc', '--name-change', type=str, default='', help='name for updated landmarks after postprocessing')
 
 args = parser.parse_args()
 
@@ -45,7 +46,7 @@ if __name__ == "__main__":
     im_paths = [os.path.join(dir_name, id) for id in im_names]  
     exts = ['.jpg', '.jpeg'] # possible image extensions
     
-    name_change=''
+    name_change=args.name_change # defaults to the empty string
     
     if args.single_fish is not None:
         # overwrite to process the specific image
