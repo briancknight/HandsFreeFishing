@@ -2062,7 +2062,7 @@ class adult_stealhead(fish):
             print('eye diameter done\n')
             
 class juvenile_stealhead(fish):
-    def __init__(self, image_path, is_hatched, predictor, write_masks=True, possible_exts = ['.jpg', '.jpeg', '.png'], mask_ext='.png', dir=None, fins_to_clip=None, scale=None, num_fish=None, n_steps=2, n_partitions=5, ord=100, verbose=False):
+    def __init__(self, image_path, is_hatched, predictor, write_masks=True, possible_exts = ['.jpg', '.jpeg', '.png'], mask_ext='.png', dir=None, use_gids=False, fins_to_clip=None, scale=None, num_fish=None, n_steps=2, n_partitions=5, ord=100, verbose=False):
         super().__init__(image_path, predictor, write_masks, possible_exts, mask_ext, dir, fins_to_clip, scale, num_fish, n_steps, n_partitions, ord, verbose)
         self.is_hatched = is_hatched
     

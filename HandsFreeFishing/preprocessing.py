@@ -857,9 +857,9 @@ def preprocess_juvenile_steelhead(im_paths, exts, genetic_ids, life_stages, meas
     qualities = []
     bad_idxs = []
     
-        
+    
     for (i, im_path) in enumerate(im_paths):
-        
+                    
         print(im_path)
         
         found_im_path=False
@@ -879,7 +879,9 @@ def preprocess_juvenile_steelhead(im_paths, exts, genetic_ids, life_stages, meas
             vert_flips.append(None)
             qualities.append(None)
         else:
-            dir, im_name, ext = splice_im_path(im_path)            
+
+            dir, im_name, ext = splice_im_path(im_path)     
+                       
             if os.path.exists(os.path.join(measurement_dir, project_dir, im_name + '.csv')):
                 pass # don't overwrite
             else:

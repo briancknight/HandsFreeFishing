@@ -37,8 +37,14 @@ args = parser.parse_args()
 
 if __name__ == "__main__":
     
-    # define project details here, including dataframe if necessary
+    # DEFINE PROJECT DETAILS HERE, INCLUDING DATA FRAME
+    
+    # NAME OF THE DATA FRAME/EXCEL SPREADSHEET
     spreadsheet_name="TDC_all_genetic_ID_2026"
+    project_name="juvenileSteelhead_FEH5"
+    using_genetic_ids=True
+    # END OF PROJECT DETAILS TO DEFINE
+    
     spreadsheet_dir_name=os.path.join("spreadsheets", spreadsheet_name+".xlsx")
     df = pd.read_excel(spreadsheet_dir_name, sheet_name=1)
     
@@ -51,49 +57,68 @@ if __name__ == "__main__":
                 return np.nan
             else:
                 return split_id[1]
+    
     image_ids = df['image_id']
     image_id_nos = [get_id_no(id) for id in image_ids]
     
-    project_name="juvenileSteelhead_FEH5"
     dir_name=os.path.join("sushi", project_name)
 
-    im_path_exts= glob.glob(os.path.join(dir_name,'*.JPG')) + glob.glob(os.path.join(dir_name,'*/*.JPG'))
-    print(im_path_exts)
+    im_path_exts= glob.glob(os.path.join(dir_name,'*')) + glob.glob(os.path.join(dir_name,'*/*'))
     
-    im_paths=[]
-    im_names=[]
-    exts=[]
-    genetic_ids=[]
-    life_stages=[]
-    im_dataframe_idxs=[]
-    
-    for im_path in im_path_exts:
-        dir,im_name_ext=os.path.split(im_path)
-        im_name, ext = os.path.splitext(im_name_ext)
-        # print(f'dir={dir}, im_name_ext = {im_name_ext}, im_name={im_name},ext={ext}')
-        im_id = get_id_no(im_name,split_string='_')
-        try: 
-            idx=image_id_nos.index(im_id)
-            im_dataframe_idxs.append(idx)
-            im_paths.append(os.path.join(dir, im_name))
-            im_names.append(im_name)
-            exts.append(ext)
-            genetic_ids.append(df['genetic_id'][idx])
-            life_stages.append(df['life_stage'][idx])
-            print(f"data found for {im_path} with genetic id {genetic_ids[-1]}")
-            print(f"life stage is: {life_stages[-1]}\n")
-            print(f"genetic id is: {genetic_ids[-1]}\n")
-        except ValueError:
-            print(f'\nno data found for im_path={im_path}\n')
-            pass
-            
-    
-    # print(im_paths[:-1])
-    name_change=''
+    if using_genetic_ids:
+        im_paths=[]
+        im_names=[]
+        genetic_ids_found=[]
+        exts=[]
+        genetic_ids=list(df['genetic_id'])
+        life_stages=[]
+        im_dataframe_idxs=[]
+        
+        for im_path in im_path_exts:
+            dir,im_name_ext=os.path.split(im_path)
+            genetic_id, ext = os.path.splitext(im_name_ext)
+            try: 
+                idx=genetic_ids.index(genetic_id)
+                genetic_ids_found.append(genetic_id)
+                im_dataframe_idxs.append(idx)
+                im_paths.append(os.path.join(dir, genetic_id))
+                im_names.append(genetic_id)
+                exts.append(ext)
+                life_stages.append(df['life_stage'][idx])
+            except ValueError:
+                print(f'\nno data found for im_path={im_path}\n')
+                pass
+    else:
+        im_paths=[]
+        im_names=[]
+        exts=[]
+        genetic_ids=[]
+        life_stages=[]
+        im_dataframe_idxs=[]
+        
+        for im_path in im_path_exts:
+            dir,im_name_ext=os.path.split(im_path)
+            im_name, ext = os.path.splitext(im_name_ext)
+            # print(f'dir={dir}, im_name_ext = {im_name_ext}, im_name={im_name},ext={ext}')
+            im_id = get_id_no(im_name,split_string='_')
+            try: 
+                idx=image_id_nos.index(im_id)
+                im_dataframe_idxs.append(idx)
+                im_paths.append(os.path.join(dir, im_name))
+                im_names.append(im_name)
+                exts.append(ext)
+                genetic_ids.append(df['genetic_id'][idx])
+                life_stages.append(df['life_stage'][idx])
+                # print(f"data found for {im_path} with genetic id {genetic_ids[-1]}")
+                # print(f"life stage is: {life_stages[-1]}\n")
+                # print(f"genetic id is: {genetic_ids[-1]}\n")
+            except ValueError:
+                print(f'\nno data found for im_path={im_path}\n')
+                pass
     
     if args.delete is not None:
-        # idx = im_names.index(args.delete)
         paths=get_paths_to_delete(project_name, args.delete)
+        
         confirmation = input(f"Are you sure you want to proceed with this deleting data relevent to {args.delete}? (y/n): ").strip().lower()
         if confirmation=='y':
             for path in paths:
@@ -105,16 +130,26 @@ if __name__ == "__main__":
             
     if args.single_fish is not None:
         # overwrite to process the specific image
-        idx = im_names.index(args.single_fish)
-        im_names = im_names[idx:idx+1]
-        im_paths = im_paths[idx:idx+1]
-        print(im_paths)
-        im_path_exts = im_path_exts[idx:idx+1]
-        
-        im_id = get_id_no(im_names[0],split_string='_')
-        idx2=image_id_nos.index(im_id)
-        genetic_ids = [df['genetic_id'][idx2]]
-        life_stages = [df['life_stage'][idx2]]
+        if using_genetic_ids:
+            # print(genetic_ids)
+            idx = genetic_ids_found.index(args.single_fish)
+            im_names = im_names[idx:idx+1]
+            im_paths = im_paths[idx:idx+1]
+            print(im_paths)
+            im_path_exts = im_path_exts[idx:idx+1]
+            genetic_ids = genetic_ids[idx:idx+1]
+            life_stages = [df['life_stage'][idx]]
+        else:
+            idx = im_names.index(args.single_fish)
+            im_names = im_names[idx:idx+1]
+            im_paths = im_paths[idx:idx+1]
+            print(im_paths)
+            im_path_exts = im_path_exts[idx:idx+1]
+            
+            im_id = get_id_no(im_names[0],split_string='_')
+            idx2=image_id_nos.index(im_id)
+            genetic_ids = [df['genetic_id'][idx2]]
+            life_stages = [df['life_stage'][idx2]]
         
     if args.cont is not None:
         # continue processing starting with a given fish id
@@ -137,7 +172,6 @@ if __name__ == "__main__":
         
     if args.run:
         from run_scripts import run_juvenile_steelhead
-        print(im_paths)
         run_juvenile_steelhead(im_paths, life_stages, genetic_ids, dir_name=project_name)
         
     if args.postprocess:
