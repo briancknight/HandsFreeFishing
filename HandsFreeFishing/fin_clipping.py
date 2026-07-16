@@ -231,7 +231,7 @@ def rotate_image(image, angle, center_point=None):
 # fish class, segments fish, fins, eyeball & computes a FL & (predicted) non-fin area
 class fish:
     
-    def __init__(self, image_path, predictor, write_masks = True, possible_exts = ['.jpg', '.jpeg', '.png'], mask_ext = '.png', fins_to_clip = None, scale=None, num_fish=None, n_steps = 2, n_partitions=5, ord=100, verbose=False):
+    def __init__(self, image_path, predictor, write_masks = True, possible_exts = ['.jpg', '.jpeg', '.png'], mask_ext = '.png', dir = None, fins_to_clip = None, scale=None, num_fish=None, n_steps = 2, n_partitions=5, ord=100, verbose=False):
         
         self.mask_ext = mask_ext
         self.predictor = predictor
@@ -251,7 +251,10 @@ class fish:
                 self.included_fins[fin.lower()] = True
                 
         image_path_split = os.path.split(image_path)
-        self.dir = os.path.split(image_path_split[0])[1]
+        if dir is None:
+            self.dir = os.path.split(image_path_split[0])[1]
+        else:
+            self.dir = dir
         self.im_name, _ = os.path.splitext(image_path_split[1])
         # read in image if it exists, and set initialize SAM
         tmp_img=None
@@ -432,8 +435,7 @@ class fish:
 
         fork_length_vector = self.recon[x_max_idx] - self.recon[x_min_idx]
         FL = np.linalg.norm(fork_length_vector) * self.scale
-        self.area = np.sum(self.fish_mask)*(self.scale**2)
-                
+        self.area = np.sum(self.fish_mask)*(self.scale**2)                
         fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
             
         self.fish_angle = np.arccos(np.dot(np.array([1,0]), fork_length_dir))*180/np.pi
@@ -774,14 +776,12 @@ class fish:
         self.full_segmentation = np.stack([self.fish_mask_full, np.zeros_like(self.fish_mask_full), np.zeros_like(self.fish_mask_full)], axis=-1).astype(np.uint8)
         # self.full_segmentation = self.fish_mask_full
         self.no_fin_segmentation = self.fish_mask_full
-        cv.imwrite(f"38_2025_fish_mask_mull_755.png",self.fish_mask_full*255)
         masks = self.get_fin_masks()
         
         for (i,mask) in enumerate(masks):
             
             # creating a rough label image
             demask = (mask==0)
-            cv.imwrite(f"38_2025_demask_{i}.png",demask*255)
             self.full_segmentation *= np.stack([demask, demask, demask], axis=-1)
             self.full_segmentation[:,:,1] +=  mask
             
@@ -1316,8 +1316,7 @@ class fish:
                     self.get_no_fin_area()
                     self.filet_fish(n_steps=self.n_steps,ord=self.ord)
                     self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
-                    self.get_eye_diameter()
-            
+                    self.get_eye_diameter()            
     def re_run(self):
         
         self.get_measurements()
@@ -1349,10 +1348,7 @@ class fish:
             print('eye diameter done\n')
 
 ############### SUBCLASSES ###############
-class juvenile_steelhead(fish):
-    def __init__(self, image_path, predictor, write_masks=True, mask_ext='.png', fins_to_clip=None, scale=None, num_fish=None, n_steps=2, n_partitions=5, ord=100, verbose=False):
-        super().__init__(image_path, predictor, write_masks, mask_ext, fins_to_clip, scale, num_fish, n_steps, n_partitions, ord, verbose)
-    
+ 
 class adult_stealhead(fish):
     def __init__(self, image_path, predictor, write_masks=True, possible_exts = ['.jpg', '.jpeg', '.png'], mask_ext='.png', fins_to_clip=None, scale=None, num_fish=None, n_steps=2, n_partitions=5, ord=100, verbose=False):
         super().__init__(image_path, predictor, write_masks, possible_exts, mask_ext, fins_to_clip, scale, num_fish, n_steps, n_partitions, ord, verbose)
@@ -2065,6 +2061,782 @@ class adult_stealhead(fish):
         if self.verbose:
             print('eye diameter done\n')
             
+class juvenile_stealhead(fish):
+    def __init__(self, image_path, is_hatched, predictor, write_masks=True, possible_exts = ['.jpg', '.jpeg', '.png'], mask_ext='.png', dir=None, fins_to_clip=None, scale=None, num_fish=None, n_steps=2, n_partitions=5, ord=100, verbose=False):
+        super().__init__(image_path, predictor, write_masks, possible_exts, mask_ext, dir, fins_to_clip, scale, num_fish, n_steps, n_partitions, ord, verbose)
+        self.is_hatched = is_hatched
+    
+    def get_measurements(self):
+        # read in ROI and orienation data from csv, *or ask user for input* (*TODO)
+        measurement_path = os.path.join('measurements', self.dir, self.im_name+'.csv')
+        
+        if os.path.exists(measurement_path):
+
+            write_masks=True
+            with open(measurement_path, newline='') as csvfile:
+                reader=csv.reader(csvfile, delimiter=',')
+                crop_data=next(reader)
+                # for (j,row) in enumerate(reader):
+                #     if j==0:
+                #         crop_data = row
+                #     break
+
+            # eye_roi_str = crop_data[1][1:-1].split()
+            # eye_roi = [int(eye_roi_str[0]), int(eye_roi_str[1]), int(eye_roi_str[2]), int(eye_roi_str[3])]
+            # head_roi_str = crop_data[2][1:-1].split()
+            # head_roi = [int(head_roi_str[0]), int(head_roi_str[1]), int(head_roi_str[2]), int(head_roi_str[3])]
+            roi_str = crop_data[1][1:-1].split()
+            print(roi_str)
+            roi = [int(roi_str[0]), int(roi_str[1]), int(roi_str[2]), int(roi_str[3])]
+            if self.is_hatched:
+                yolk_sac_roi_str = crop_data[2][1:-1].split()
+                print(yolk_sac_roi_str)
+                yolk_sac_roi = [int(yolk_sac_roi_str[0]), int(yolk_sac_roi_str[1]), int(yolk_sac_roi_str[2]), int(yolk_sac_roi_str[3])]
+                self.yolk_sac_prediction_box = np.array([yolk_sac_roi[0],yolk_sac_roi[1],yolk_sac_roi[0]+yolk_sac_roi[2], yolk_sac_roi[1]+yolk_sac_roi[3]])
+                                
+            self.horiz_flip = crop_data[3]
+            self.vertical_flip = crop_data[4]
+            if len(crop_data) > 5:
+                self.quality = crop_data[5]
+            else:
+                self.quality=None
+            
+            # self.head_box = np.array([head_roi[0],head_roi[1],head_roi[0]+head_roi[2], head_roi[1]+head_roi[3]])
+            # self.eye_box = np.array([eye_roi[0],eye_roi[1],eye_roi[0]+eye_roi[2], eye_roi[1]+eye_roi[3]])
+            self.prediction_box = np.array([roi[0],roi[1],roi[0]+roi[2], roi[1]+roi[3]])
+            
+        else:
+            pass #input_measurements(self)
+        
+    def get_eye_box(self, eye_ratio):
+        
+        if hasattr(self, "eye_box"):
+            return self.eye_box
+        else:
+            x = self.recon_offset_rotated[:,0]
+            y = self.recon_offset_rotated[:,1]
+            x_left_side_idxs=np.argwhere(np.array([x < 0.2*np.mean(x), x > 0.05*np.mean(x)]).all(axis=0))
+            mean_x = np.mean(x[x_left_side_idxs])
+            eye_level = (np.mean(y[x_left_side_idxs]) + np.min(y[x_left_side_idxs]))/2
+            
+            mms = self.FL*eye_ratio # estimate what proportion of the fish length will contain the dorsal fin
+            
+            min_x = mean_x - mms/self.scale/2
+            max_x = mean_x + mms/self.scale/2
+            min_y = eye_level - mms/self.scale/2
+            max_y = eye_level + mms/self.scale/2
+
+            tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
+            bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
+            tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
+            br_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,max_y]) - self.rot_mat[:,2])
+            corners = [tl_rot, tr_rot, br_rot, bl_rot]    
+                
+            x_vals = np.array([v[0] for v in corners])
+            y_vals = np.array([v[1] for v in corners])
+                        
+            self.eye_box = self.get_box(x_vals, y_vals)
+    
+    def check_freezer(self):
+        self.frozen=False
+        measurement_path = os.path.join('measurements', self.dir, self.im_name + '.csv')
+        if os.path.exists(measurement_path):
+            pass
+        else:
+            warnings.warn('Preprocessing data is unavailable, please run the preprocessing script first.')
+        
+        initial_seg_path = os.path.join('segmentations', self.dir, 'initial_masks', 'initial_mask_' + self.im_name + self.mask_ext)
+        nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_masks', 'no_fin_mask_' + self.im_name + self.mask_ext)
+        full_seg_path = os.path.join('segmentations', self.dir, 'full_masks', 'full_mask_' + self.im_name + self.mask_ext)
+        dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_masks', 'dorsal_mask_' + self.im_name + self.mask_ext)
+        adipose_seg_path = os.path.join('segmentations', self.dir, 'adipose_masks', 'adipose_mask_' + self.im_name + self.mask_ext)
+        caudal_seg_path = os.path.join('segmentations', self.dir, 'caudal_masks', 'caudal_mask_' + self.im_name + self.mask_ext)
+        anal_seg_path = os.path.join('segmentations', self.dir, 'anal_masks', 'anal_mask_' + self.im_name + self.mask_ext)
+        pelvic_seg_path = os.path.join('segmentations', self.dir, 'pelvic_masks', 'pelvic_mask_' + self.im_name + self.mask_ext)
+        pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_masks', 'pectoral_mask_' + self.im_name + self.mask_ext)
+        eye_seg_path = os.path.join('segmentations', self.dir, 'eye_masks', 'eye_mask_' + self.im_name + self.mask_ext)
+        
+        all_seg_paths = [initial_seg_path, nf_seg_path, full_seg_path, dorsal_seg_path, adipose_seg_path, 
+                     caudal_seg_path, anal_seg_path, pelvic_seg_path, pectoral_seg_path, 
+                     eye_seg_path]
+        
+        if self.is_hatched:
+            yolk_sac_seg_path = os.path.join('segmentations', self.dir, 'yolk_sac_masks', 'yolk_sac_mask_' + self.im_name + self.mask_ext)
+            all_seg_paths.append(yolk_sac_seg_path)
+            
+        if np.all([os.path.exists(path) for path in all_seg_paths]):
+            self.frozen=True
+        
+        print('frozen fish: ', self.frozen)
+        
+    def thaw(self):
+
+        initial_seg_path = os.path.join('segmentations', self.dir, 'initial_masks', 'initial_mask_' + self.im_name + self.mask_ext)
+        nf_seg_path = os.path.join('segmentations', self.dir, 'no_fin_masks', 'no_fin_mask_' + self.im_name + self.mask_ext)
+        full_seg_path = os.path.join('segmentations', self.dir, 'full_masks', 'full_mask_' + self.im_name + self.mask_ext)
+        dorsal_seg_path = os.path.join('segmentations', self.dir, 'dorsal_masks', 'dorsal_mask_' + self.im_name + self.mask_ext)
+        adipose_seg_path = os.path.join('segmentations', self.dir, 'adipose_masks', 'adipose_mask_' + self.im_name + self.mask_ext)
+        caudal_seg_path = os.path.join('segmentations', self.dir, 'caudal_masks', 'caudal_mask_' + self.im_name + self.mask_ext)
+        anal_seg_path = os.path.join('segmentations', self.dir, 'anal_masks', 'anal_mask_' + self.im_name + self.mask_ext)
+        pelvic_seg_path = os.path.join('segmentations', self.dir, 'pelvic_masks', 'pelvic_mask_' + self.im_name + self.mask_ext)
+        pectoral_seg_path = os.path.join('segmentations', self.dir, 'pectoral_masks', 'pectoral_mask_' + self.im_name + self.mask_ext)
+        eye_seg_path = os.path.join('segmentations', self.dir, 'eye_masks', 'eye_mask_' + self.im_name + self.mask_ext)
+        head_seg_path = os.path.join('segmentations', self.dir, 'head_masks', 'head_mask_' + self.im_name + self.mask_ext)
+        
+        self.initial_fish_mask = cv.imread(initial_seg_path, cv.IMREAD_GRAYSCALE)*255
+        self.no_fin_segmentation=cv.imread(nf_seg_path,cv.IMREAD_GRAYSCALE)*255   
+        self.full_segmentation=cv.imread(full_seg_path)*255   
+        self.dorsal_mask=cv.imread(dorsal_seg_path,cv.IMREAD_GRAYSCALE)*255
+        self.adipose_mask=cv.imread(adipose_seg_path,cv.  IMREAD_GRAYSCALE)*255  
+        self.caudal_mask=cv.imread(caudal_seg_path,cv.IMREAD_GRAYSCALE)*255  
+        self.anal_mask=cv.imread(anal_seg_path,cv.IMREAD_GRAYSCALE)*255  
+        self.pelvic_mask=cv.imread(pelvic_seg_path,cv.IMREAD_GRAYSCALE)*255
+        self.pectoral_mask=cv.imread(pectoral_seg_path,cv.IMREAD_GRAYSCALE)*255
+        self.eye_mask=cv.imread(eye_seg_path,cv.  IMREAD_GRAYSCALE)*255
+        self.head_mask=cv.imread(head_seg_path,cv.  IMREAD_GRAYSCALE)*255
+        
+    def get_caudal_box(self, caudal_ratio):
+        
+        x = self.recon_offset_rotated[:,0]
+        y = self.recon_offset_rotated[:,1]
+        max_x = np.max(x)
+        x_right_side_idxs=np.argwhere(x > np.mean(x))
+        min_y = np.min(y[x_right_side_idxs])
+        max_y = np.max(y[x_right_side_idxs])
+        # caudal_box = np.array([max_x - 18/scale, min_y, max_x,  max_y])
+
+        mms = self.FL*caudal_ratio # estimate what proportion of the fish length will contain the caudal fin
+
+        tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x-mms/self.scale,min_y]) - self.rot_mat[:,2])
+        bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x-mms/self.scale,max_y]) - self.rot_mat[:,2])
+        tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,max_y]) - self.rot_mat[:,2])
+        br_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
+        corners = [tl_rot, tr_rot, br_rot, bl_rot]    
+            
+        x_vals = np.array([v[0] for v in corners])
+        y_vals = np.array([v[1] for v in corners])
+        
+        self.caudal_box = self.get_box(x_vals, y_vals)
+        
+    def get_digitized_landmarks(self,n_steps=7, ord=100):
+    
+        nf_mask = self.no_fin_segmentation.copy()
+        eye_mask = self.eye_mask.copy()
+        if self.horiz_flip =='1':
+            # print('flipped horizontally')
+            nf_mask = nf_mask[:,::-1]
+            eye_mask = eye_mask[:,::-1]
+        if self.vertical_flip == '1':
+            # print('flipped vertically')
+            nf_mask = nf_mask[::-1,:]
+            eye_mask=eye_mask[::-1,:]
+        
+        nf_recon, nf_box_bounds = compute_contour(nf_mask, ord=ord)#3
+        eye_contour,_ = compute_contour(eye_mask, ord=ord)
+        nf_offset = np.array([nf_box_bounds[0], nf_box_bounds[1]])
+
+        # update this to deal with open-mouthed fish
+        x_min_idx = np.argmin(nf_recon[:,0])
+        x_max_idx = np.argmax(nf_recon[:,0])
+
+        recon_offset = nf_recon - nf_offset
+        eye_contour_offset = eye_contour - nf_offset
+        fork_length_vector = nf_recon[x_max_idx] - nf_recon[x_min_idx]
+
+        fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
+            
+        nf_fish_angle = np.arccos(np.dot(np.array([1,0]), fork_length_dir))*180/np.pi
+        
+        if fork_length_dir[1] < 0:
+            nf_fish_angle = -1 * nf_fish_angle
+            
+        nf_cp = 0.5*(recon_offset[x_min_idx] + recon_offset[x_max_idx]) # average
+        rot_mat = cv.getRotationMatrix2D(nf_cp, nf_fish_angle, 1.0)
+
+        recon_offset_rotated =  (rot_mat[:2,:2]@(recon_offset.transpose())).transpose() + rot_mat[:,2]
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        recon_offset_rotated = np.roll(recon_offset_rotated, -x_min_idx, axis=0)
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        
+        # rotate the eye contour by the same transformation
+        eye_contour_rotated = (rot_mat[:2,:2]@(eye_contour_offset.transpose())).transpose() + rot_mat[:,2]
+        x_max_idx_eye = np.argmax(eye_contour_rotated[:,0])
+        
+        # redefine recon_offset by unrotated shifted recon_offset_rotated, now with idx 0 corresponding to the minimum x index
+        recon_offset = (rot_mat[:2,:2].transpose()@((recon_offset_rotated - rot_mat[:,2]).transpose())).transpose()
+        # center_of_mass = np.mean(recon_offset, axis=0) + self.nf_offset
+        
+        top_step = int(np.ceil(x_max_idx/(n_steps)))
+        bottom_step = int(np.ceil((len(recon_offset) - x_max_idx)/n_steps))
+        top_steps = np.s_[0:x_max_idx:top_step]
+        bottom_steps = np.s_[x_max_idx:len(recon_offset):bottom_step]
+        
+        steps = np.r_[top_steps, bottom_steps]
+        sector_pts = recon_offset[steps].astype(int) + nf_offset
+        eye_pt = eye_contour[x_max_idx_eye].astype(int)
+        
+        truss_pairs = [(0,1), (0,2), (0,-1), (0,-2), (0, 7), (0, 'eye'),
+                 (1, 2),(1, 'eye'), (1, -1), (1, -2),
+                 (2,3), (2,-1), (2,-2), (2,-3),
+                 (3,4), (3,-2),(3,-3),(3,-4),
+                 (4,5), (4, -3), (4, -4),
+                 (5,6), (5,-4), (5,-5),(5, -6), 
+                 (6,7), (6, -5), (6,-6),
+                 (7,-6),
+                 (-6, -5), 
+                 (-5,-4),
+                 (-4,-3),
+                 (-3,-2),
+                 (-2,-1)
+                 ]
+        # idxs = [6, 5, 8, 12, 13, 14, ]
+        best_truss_pairs = [(0,'eye'), (0, 7), 
+                      (1, 'eye'),
+                      (2, -1), (2,-2),(2,-3),
+                      (3,-2),(3,-4),
+                      (4,5), (4,-3), (4,-4), 
+                      (5, -6),
+                      (6,7), (6, -5), 
+                      (7,-6),
+                      (-5,-4)
+                      ]
+        self.truss_points=[sector_pts[i] for i in range(len(sector_pts))]
+        self.truss_points.append(eye_pt)
+        
+        self.truss_lengths = []
+        self.best_truss_lengths = []
+        self.truss_start_end_pts = []
+
+        
+        for (i,pair) in enumerate(truss_pairs):
+            idx1 = pair[0]
+            idx2 = pair[1]
+            if type(idx2)==int:
+                self.truss_start_end_pts.append([sector_pts[-idx1], sector_pts[-idx2]])
+                self.truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - sector_pts[-idx2]))
+            else:
+                if idx2=='eye':
+                    self.truss_start_end_pts.append([sector_pts[-idx1], eye_pt])
+                    self.truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - eye_pt))
+            
+            if pair in best_truss_pairs:
+                if type(idx2)==int:
+                    self.best_truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - sector_pts[-idx2]))
+                else:
+                    if idx2=='eye':
+                        self.best_truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - eye_pt))
+
+    def get_anatomical_landmarks(self,ord=100):
+    
+        nf_mask = self.no_fin_segmentation.copy()
+        adipose_mask = self.adipose_mask.copy()
+        anal_mask = self.anal_mask.copy()
+        caudal_mask = self.caudal_mask.copy()
+        dorsal_mask = self.dorsal_mask.copy()
+        eye_mask = self.eye_mask.copy()
+        head_mask = self.head_mask.copy()
+        pectoral_mask = self.pectoral_mask.copy()
+        pelvic_mask = self.pelvic_mask.copy()
+        
+        if self.horiz_flip =='1':
+            # print('flipped horizontally')
+            nf_mask = nf_mask[:,::-1]
+            adipose_mask = adipose_mask[:,::-1]
+            anal_mask = anal_mask[:,::-1]
+            caudal_mask = caudal_mask[:,::-1]
+            dorsal_mask = dorsal_mask[:,::-1]
+            eye_mask = eye_mask[:,::-1]
+            head_mask = head_mask[:,::-1]
+            pectoral_mask = pectoral_mask[:,::-1]
+            pelvic_mask = pelvic_mask[:,::-1]
+            
+        if self.vertical_flip == '1':
+            # print('flipped vertically')
+            nf_mask = nf_mask[::-1,:]
+            adipose_mask = adipose_mask[::-1,:]
+            anal_mask = anal_mask[::-1,:]
+            caudal_mask = caudal_mask[::-1,:]
+            dorsal_mask = dorsal_mask[::-1,:]
+            eye_mask = eye_mask[::-1,:]
+            head_mask = head_mask[::-1,:]
+            pectoral_mask = pectoral_mask[::-1,:]
+            pelvic_mask = pelvic_mask[::-1,:]
+        
+        nf_recon, nf_box_bounds = compute_contour(nf_mask, ord=ord)#3
+        eye_contour,_ = compute_contour(eye_mask, ord=ord)
+        nf_offset = np.array([nf_box_bounds[0], nf_box_bounds[1]])
+
+        # update this to deal with open-mouthed fish
+        x_min_idx = np.argmin(nf_recon[:,0])
+        x_face = nf_recon[x_min_idx-10, x_min_idx+10,0]
+        x_mins, properties = find_peaks(-nf_recon[:,0])
+        properties['peak_heights']
+        x_max_idx = np.argmax(nf_recon[:,0])
+
+        recon_offset = nf_recon - nf_offset
+        eye_contour_offset = eye_contour - nf_offset
+        fork_length_vector = nf_recon[x_max_idx] - nf_recon[x_min_idx]
+
+        fork_length_dir = fork_length_vector/np.linalg.norm(fork_length_vector)
+            
+        nf_fish_angle = np.arccos(np.dot(np.array([1,0]), fork_length_dir))*180/np.pi
+        
+        if fork_length_dir[1] < 0:
+            nf_fish_angle = -1 * nf_fish_angle
+            
+        nf_cp = 0.5*(recon_offset[x_min_idx] + recon_offset[x_max_idx]) # average
+        rot_mat = cv.getRotationMatrix2D(nf_cp, nf_fish_angle, 1.0)
+
+        recon_offset_rotated =  (rot_mat[:2,:2]@(recon_offset.transpose())).transpose() + rot_mat[:,2]
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        recon_offset_rotated = np.roll(recon_offset_rotated, -x_min_idx, axis=0)
+        x_min_idx = np.argmin(recon_offset_rotated[:,0])
+        x_max_idx = np.argmax(recon_offset_rotated[:,0])
+        
+        # rotate the eye contour by the same transformation
+        eye_contour_rotated = (rot_mat[:2,:2]@(eye_contour_offset.transpose())).transpose() + rot_mat[:,2]
+        x_max_idx_eye = np.argmax(eye_contour_rotated[:,0])
+        
+        # redefine recon_offset by unrotated shifted recon_offset_rotated, now with idx 0 corresponding to the minimum x index
+        recon_offset = (rot_mat[:2,:2].transpose()@((recon_offset_rotated - rot_mat[:,2]).transpose())).transpose()
+        # center_of_mass = np.mean(recon_offset, axis=0) + self.nf_offset
+        
+        top_step = int(np.ceil(x_max_idx/(n_steps)))
+        bottom_step = int(np.ceil((len(recon_offset) - x_max_idx)/n_steps))
+        top_steps = np.s_[0:x_max_idx:top_step]
+        bottom_steps = np.s_[x_max_idx:len(recon_offset):bottom_step]
+        
+        steps = np.r_[top_steps, bottom_steps]
+        sector_pts = recon_offset[steps].astype(int) + nf_offset
+        eye_pt = eye_contour[x_max_idx_eye].astype(int)
+        
+        truss_pairs = [(0,1), (0,2), (0,-1), (0,-2), (0, 7), (0, 'eye'),
+                 (1, 2),(1, 'eye'), (1, -1), (1, -2),
+                 (2,3), (2,-1), (2,-2), (2,-3),
+                 (3,4), (3,-2),(3,-3),(3,-4),
+                 (4,5), (4, -3), (4, -4),
+                 (5,6), (5,-4), (5,-5),(5, -6), 
+                 (6,7), (6, -5), (6,-6),
+                 (7,-6),
+                 (-6, -5), 
+                 (-5,-4),
+                 (-4,-3),
+                 (-3,-2),
+                 (-2,-1)
+                 ]
+        # idxs = [6, 5, 8, 12, 13, 14, ]
+        best_truss_pairs = [(0,'eye'), (0, 7), 
+                      (1, 'eye'),
+                      (2, -1), (2,-2),(2,-3),
+                      (3,-2),(3,-4),
+                      (4,5), (4,-3), (4,-4), 
+                      (5, -6),
+                      (6,7), (6, -5), 
+                      (7,-6),
+                      (-5,-4)
+                      ]
+        self.truss_points=[sector_pts[i] for i in range(len(sector_pts))]
+        self.truss_points.append(eye_pt)
+        
+        self.truss_lengths = []
+        self.best_truss_lengths = []
+        self.truss_start_end_pts = []
+
+        
+        for (i,pair) in enumerate(truss_pairs):
+            idx1 = pair[0]
+            idx2 = pair[1]
+            if type(idx2)==int:
+                self.truss_start_end_pts.append([sector_pts[-idx1], sector_pts[-idx2]])
+                self.truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - sector_pts[-idx2]))
+            else:
+                if idx2=='eye':
+                    self.truss_start_end_pts.append([sector_pts[-idx1], eye_pt])
+                    self.truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - eye_pt))
+            
+            if pair in best_truss_pairs:
+                if type(idx2)==int:
+                    self.best_truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - sector_pts[-idx2]))
+                else:
+                    if idx2=='eye':
+                        self.best_truss_lengths.append(np.linalg.norm(sector_pts[-idx1] - eye_pt))
+                  
+    def get_dorsal_box(self, dorsal_ratio):
+        x = self.recon_offset_rotated[:,0]
+        y = self.recon_offset_rotated[:,1]
+        x_middle_idxs=np.argwhere(np.array([x < 0.6*np.max(x), x > 0.5*np.max(x)]).all(axis=0)) # was x > 0.4*...
+        min_y = np.min(y[x_middle_idxs])
+        top_idx = np.argwhere(y==min_y)[0]
+        top_x = x[top_idx]
+        top_y = y[top_idx]
+        
+        mms = self.FL*dorsal_ratio # estimate what proportion of the fish length will contain the dorsal fin
+        
+        min_x = top_x[0] - mms/self.scale/2
+        max_x = top_x[0] + mms/self.scale/2
+        # max_y = top_y[0] + mms/self.scale/2
+        # min_y = top_y[0] - mms/self.scale/10
+        max_y = top_y[0] + mms/self.scale/3
+        min_y = top_y[0] - mms/self.scale/3
+            
+        tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
+        bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
+        tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
+        br_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,max_y]) - self.rot_mat[:,2])
+        corners = [tl_rot, tr_rot, br_rot, bl_rot]    
+            
+        x_vals = np.array([v[0] for v in corners])
+        y_vals = np.array([v[1] for v in corners])
+            
+        self.dorsal_box = self.get_box(x_vals, y_vals)
+
+    def get_pectoral_box(self, pectoral_ratio):
+        x = self.recon_offset_rotated[:,0]
+        y = self.recon_offset_rotated[:,1]
+        x_left_middle_idxs=np.argwhere(np.array([x > 0.1*np.max(x), x < 0.3*np.max(x)]).all(axis=0))
+        max_y = np.max(y[x_left_middle_idxs])
+        pectoral_idx = np.argwhere(y==max_y)[0]
+        pectoral_x = x[pectoral_idx]
+        pectoral_y = y[pectoral_idx]*0.8
+        
+        mms = self.FL*pectoral_ratio # estimate what proportion of the fish length will contain the dorsal fin
+        
+        min_x = pectoral_x[0] - mms/self.scale
+        max_x = pectoral_x[0] + mms/self.scale
+        max_y = pectoral_y[0] + mms/self.scale/3
+        min_y = pectoral_y[0] - mms/self.scale/3
+
+        tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
+        bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
+        tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
+        br_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,max_y]) - self.rot_mat[:,2])
+        corners = [tl_rot, tr_rot, br_rot, bl_rot]    
+            
+        x_vals = np.array([v[0] for v in corners])
+        y_vals = np.array([v[1]-10 for v in corners])
+                    
+        self.pectoral_box =  self.get_box(x_vals, y_vals)
+
+    def get_pelvic_box(self, pectoral_ratio):
+        x = self.recon_offset_rotated[:,0]
+        y = self.recon_offset_rotated[:,1]
+        x_left_middle_idxs=np.argwhere(np.array([x > 0.5*np.max(x), x < 0.65*np.max(x), y > np.mean(y)]).all(axis=0)) # was x > 0.5*..
+        mean_y = np.mean(y[x_left_middle_idxs])
+        signal=np.abs(y[x_left_middle_idxs]-mean_y)
+        pelvic_idx = x_left_middle_idxs[np.argwhere(signal==np.min(signal))[0]]
+        pelvic_x = x[pelvic_idx]
+        pelvic_y = y[pelvic_idx]
+        
+        mms = self.FL*pectoral_ratio # estimate what proportion of the fish length will contain the dorsal fin
+        
+        min_x = pelvic_x[0] - mms/self.scale/2
+        max_x = pelvic_x[0] + mms/self.scale/2
+        max_y = pelvic_y[0] + mms/self.scale/8
+        min_y = pelvic_y[0] - mms/self.scale/2
+
+        tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
+        bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
+        tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
+        br_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,max_y]) - self.rot_mat[:,2])
+        corners = [tl_rot, tr_rot, br_rot, bl_rot]    
+            
+        x_vals = np.array([v[0] for v in corners])
+        y_vals = np.array([v[1] for v in corners])
+                    
+        self.pelvic_box = self.get_box(x_vals, y_vals)
+
+    def get_anal_box(self, anal_ratio):
+        x = self.recon_offset_rotated[:,0]
+        y = self.recon_offset_rotated[:,1]
+        x_right_middle_idxs=np.argwhere(np.array([x > 0.65*np.max(x), x < 0.85*np.max(x)]).all(axis=0))
+        max_y = np.max(y[x_right_middle_idxs])
+        anal_idx = np.argwhere(y==max_y)[0]
+        anal_x = x[anal_idx]
+        anal_y = y[anal_idx]
+        
+        mms = self.FL*anal_ratio # estimate what proportion of the fish length will contain the dorsal fin
+        
+        min_x = anal_x[0] - mms/(self.scale)/2
+        max_x = anal_x[0] + mms/(self.scale)/2
+        max_y = anal_y[0] + mms/(self.scale)/2
+        min_y = anal_y[0] - mms/(self.scale)/2   
+        
+        tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x, min_y]) - self.rot_mat[:,2])
+        bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x, max_y]) - self.rot_mat[:,2])
+        tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x, min_y]) - self.rot_mat[:,2])
+        br_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x, max_y]) - self.rot_mat[:,2])
+        
+        corners = [tl_rot, tr_rot, br_rot, bl_rot]    
+            
+        x_vals = np.array([v[0] for v in corners])
+        y_vals = np.array([v[1] for v in corners])
+                    
+        self.anal_box = self.get_box(x_vals, y_vals)
+
+    def get_adipose_box(self, adipose_ratio):
+        x = self.recon_offset_rotated[:,0]
+        y = self.recon_offset_rotated[:,1]
+        x_right_middle_idxs=np.argwhere(np.array([x > 0.75*np.max(x), x < 0.85*np.max(x), y < np.mean(y)]).all(axis=0))
+        min_y = np.min(y[x_right_middle_idxs])
+        anal_idx = np.argwhere(y==min_y)[0]
+        anal_x = x[anal_idx]
+        anal_y = y[anal_idx]
+        
+        mms = self.FL*adipose_ratio # estimate what proportion of the fish length will contain the dorsal fin
+        
+        min_x = anal_x[0] - mms/self.scale/2
+        max_x = anal_x[0] + mms/self.scale/2
+        max_y = anal_y[0] + mms/self.scale/4
+        min_y = anal_y[0] - mms/self.scale/5
+
+        tl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,min_y]) - self.rot_mat[:,2])
+        bl_rot = self.rot_mat[:2,:2].transpose()@(np.array([min_x,max_y]) - self.rot_mat[:,2])
+        tr_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,min_y]) - self.rot_mat[:,2])
+        br_rot = self.rot_mat[:2,:2].transpose()@(np.array([max_x,max_y]) - self.rot_mat[:,2])
+        corners = [tl_rot, tr_rot, br_rot, bl_rot]    
+            
+        x_vals = np.array([v[0] for v in corners])
+        y_vals = np.array([v[1] for v in corners])
+                    
+        self.adipose_box = self.get_box(x_vals, y_vals)
+    
+    def get_centered_box(self, point, ratios):
+        (rx,ry)=ratios
+        (x,y) = point
+        dx=rx/self.scale
+        dy=ry/self.scale
+        box = np.array([x - dx, y - dy, x + dx, y + dy])
+        return box
+    
+    def load_fin_points(self):
+        if not hasattr(self, "fin_points"):
+            fin_points_path = os.path.join('measurements', self.dir, self.im_name+'_fin_points.npy')
+            if os.path.exists(fin_points_path):
+                self.fin_points=np.load(fin_points_path)
+                
+                # assign individual points
+                self.eye_point = np.array([self.fin_points[0]])
+                if self.is_hatched:
+                    self.yolk_sac_point = np.array([self.fin_points[1]])
+                # self.dorsal_point = np.array([self.fin_points[0]])
+                # self.adipose_point = np.array([self.fin_points[1]])
+                # self.caudal_point = np.array([self.fin_points[2]])
+                # self.anal_point = np.array([self.fin_points[3]])
+                # self.pelvic_point = np.array([self.fin_points[4]])
+                # self.pectoral_point = np.array([self.fin_points[5]])
+                
+            else: # no points to assign
+                print("No fin points available for this image")
+        else:
+            # assign individual points
+            self.eye_point = np.array([self.fin_points[0]])
+            if self.is_hatched:
+                self.yolk_sac_point = np.array([self.fin_points[1]])
+            # self.dorsal_point = np.array([self.fin_points[0]])
+            # self.adipose_point = np.array([self.fin_points[1]])
+            # self.caudal_point = np.array([self.fin_points[2]])
+            # self.anal_point = np.array([self.fin_points[3]])
+            # self.pelvic_point = np.array([self.fin_points[4]])
+            # self.pectoral_point = np.array([self.fin_points[5]])
+
+    def get_fin_masks(self):
+        
+        if self.include_all_fins:
+            return [self.eye_mask, self.dorsal_mask, self.adipose_mask, self.caudal_mask,
+                 self.anal_mask, self.pelvic_mask, self.pectoral_mask]
+        else:
+            if self.is_hatched:
+                mask_list=[self.eye_mask, self.yolk_sac_mask]
+            else:
+                mask_list=[self.eye_mask]
+            
+            # if self.included_fins['eye']:
+                # mask_list.append(self.eye_mask)
+            if self.included_fins['dorsal']:
+                mask_list.append(self.dorsal_mask)
+            if self.included_fins['adipose']:
+                mask_list.append(self.adipose_mask)
+            if self.included_fins['caudal']:
+                mask_list.append(self.caudal_mask)
+            if self.included_fins['anal']:
+                mask_list.append(self.anal_mask)
+            if self.included_fins['pelvic']:
+                mask_list.append(self.pelvic_mask)
+            if self.included_fins['pectoral']:
+                mask_list.append(self.pectoral_mask)
+        return mask_list 
+    
+    def get_fin_clips(self):
+        fin_points_path = os.path.join('measurements', self.dir, self.im_name+'_fin_points.npy')
+        if False:#os.path.exists(fin_points_path):
+            self.load_fin_points()
+            
+            dorsal_box=self.get_centered_box(self.dorsal_point[0], ratios=(30, 20))
+            dorsal_mask, dorsal_score,_ = self.predictor.predict(point_coords=self.dorsal_point, point_labels=np.array([1]), box=dorsal_box[None,:], multimask_output=False)
+            self.dorsal_mask = dorsal_mask[0]
+            
+            adipose_box=self.get_centered_box(self.adipose_point[0], ratios=(15, 15))
+            adipose_mask, adipose_score,_ = self.predictor.predict(point_coords=self.adipose_point, point_labels=np.array([1]), box=adipose_box[None,:], multimask_output=False)
+            self.adipose_mask = adipose_mask[0]
+            
+            cx,cy=self.caudal_point[0]
+            # add additional caudal points to help segment entire fin (can be challenging when there is a split in the fin)
+            caudal_points = np.copy(self.caudal_point)
+            caudal_points = np.array([self.caudal_point[0], [cx, cy + 10/self.scale], [cx, cy + 10/self.scale]])
+            caudal_mask, caudal_score,_ = self.predictor.predict(point_coords=caudal_points, point_labels=np.array([1,1,1]), multimask_output=False)
+            self.caudal_mask = caudal_mask[0]
+            
+            anal_mask, anal_score,_ = self.predictor.predict(point_coords=self.anal_point, point_labels=np.array([1]), multimask_output=False)
+            self.anal_mask = anal_mask[0]
+            
+            pelvic_box=self.get_centered_box(self.pelvic_point[0], ratios=(30, 20))
+            pelvic_mask, pelvic_score,_ = self.predictor.predict(point_coords=self.pelvic_point, point_labels=np.array([1]), box=pelvic_box[None,:], multimask_output=False)
+            self.pelvic_mask = pelvic_mask[0]
+            
+            pectoral_box=self.get_centered_box(self.pectoral_point[0], ratios=(30, 15))
+            pectoral_mask, pectoral_score,_ = self.predictor.predict(point_coords=self.pectoral_point, point_labels=np.array([1]), box=pectoral_box[None,:], multimask_output=False)
+            self.pectoral_mask = pectoral_mask[0]
+            
+            self.get_eye_box(1/15)  
+            
+            self.eye_mask, eye_score = self.get_mask(self.eye_box)
+            self.head_mask, head_score = self.get_mask(self.head_box)
+            
+        else:
+            eye_box=self.get_centered_box(self.eye_point[0], ratios=(0.5, 0.5))
+            eye_mask, eye_score,_ = self.predictor.predict(point_coords=self.eye_point, point_labels=np.array([1]), box=eye_box[None,:], multimask_output=False)
+            self.eye_mask = eye_mask[0]
+            
+            if self.is_hatched:
+                yolk_sac_mask, yolk_sac_score,_ = self.predictor.predict(point_coords=self.yolk_sac_point, point_labels=np.array([1]), box=self.yolk_sac_prediction_box, multimask_output=False)
+                self.yolk_sac_mask = yolk_sac_mask[0]
+            # self.get_eye_box(1/15)    
+            self.get_dorsal_box(1/5)
+            self.get_adipose_box(1/10)
+            self.get_caudal_box(1/4.5)
+            self.get_anal_box(1/5)
+            self.get_pelvic_box(1/15)
+            self.get_pectoral_box(1/8)
+        
+            # self.head_mask, head_score = self.get_mask(self.head_box)
+            
+            # self.eye_mask, eye_score = self.get_mask(self.eye_box)
+            self.dorsal_mask, dorsal_score = self.get_mask(self.dorsal_box)
+            self.adipose_mask, adipose_score = self.get_mask(self.adipose_box)
+            self.caudal_mask, caudal_score = self.get_mask(self.caudal_box)
+            self.anal_mask, anal_score = self.get_mask(self.anal_box)
+            self.pelvic_mask, pelvic_score = self.get_mask(self.pelvic_box)
+            self.pectoral_mask, pectoral_score = self.get_mask(self.pectoral_box)
+        
+        if self.is_hatched:
+            names = ["yolk sac", "eye", "dorsal", "adipose", "caudal", "anal", "pelvic", "pectoral"]
+            self.scores = [yolk_sac_score, eye_score, dorsal_score, adipose_score, caudal_score, anal_score, pelvic_score, pectoral_score]
+        else:
+            names = ["eye", "dorsal", "adipose", "caudal", "anal", "pelvic", "pectoral"]
+            self.scores = [eye_score, dorsal_score, adipose_score, caudal_score, anal_score, pelvic_score, pectoral_score]
+            
+        for (i,score) in enumerate(self.scores):
+            print(f"{names[i]}_mask score= {score}", flush=True)
+            
+    def get_scale(self,ds=1):
+        # predict scale based on template matching with fixed grid image
+        
+        measurement_path = os.path.join('measurements', self.dir, self.im_name+'.csv')
+        with open(measurement_path, newline='') as csvfile:
+            reader=csv.reader(csvfile, delimiter=',')
+            for (j,row) in enumerate(reader):
+                if j==0:
+                    scale_data = row
+        self.scale = float(scale_data[0])
+        
+    def write_fin_masks(self):
+        
+        # self.write_mask(self.head_mask, name="head")
+        if self.is_hatched:
+            self.write_mask(self.yolk_sac_mask, name="yolk_sac")
+        self.write_mask(self.eye_mask, name="eye") 
+        self.write_mask(self.dorsal_mask, name="dorsal")
+        self.write_mask(self.adipose_mask, name="adipose")
+        self.write_mask(self.caudal_mask, name="caudal")
+        self.write_mask(self.anal_mask, name="anal")
+        self.write_mask(self.pelvic_mask, name="pelvic")
+        self.write_mask(self.pectoral_mask, name="pectoral")
+    
+    def run(self):
+        
+        if not self.can_run: # file name not found, cannot run program
+            return
+        
+        else:
+             
+            print('\nfor: ', self.im_path)
+            
+            self.check_freezer()
+                
+            if self.frozen:
+                self.re_run()
+            
+            else:
+                self.get_measurements()
+                self.get_scale(ds=1)
+                self.load_fin_points()
+                self.segment_fish()
+            
+                if self.degenerate:
+                    print('degenerate!\n')
+                    self.no_fin_area=None
+                    self.FL=None
+                    self.area=None
+                    self.sector_areas=[None]*(2*self.n_steps)
+                    self.line_lengths=[None]*(2*self.n_steps)
+                    self.major_axis=None
+                    self.minor_axis=None
+                    self.yolk_sac_area=None
+                else: 
+                    self.level_fish()
+                    self.get_fin_clips()
+                    self.get_full_segmentations()
+                    self.get_no_fin_area(convex_hull_correction=False)
+                    self.filet_fish(n_steps=self.n_steps,ord=self.ord)
+                    self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
+                    self.get_eye_diameter()
+                    if self.is_hatched:
+                        self.yolk_sac_area = np.sum(self.yolk_sac_mask>0) * (self.scale**2)
+                    
+            
+    def re_run(self):
+        
+        self.get_measurements()
+        self.get_scale(ds=1)
+        self.segment_fish()
+        self.level_fish()
+        if self.verbose:
+            print('level fish done\n')
+        # self.get_fin_clips()
+        print('\nthawing...')
+        self.thaw()
+        print('thawed\n')
+        
+        self.get_no_fin_area(convex_hull_correction=False)
+        
+        if self.verbose:
+            print('get no fin area done\n')
+        self.filet_fish(n_steps=self.n_steps,ord=self.ord)
+        
+        if self.verbose:
+            print('filet done\n')
+        self.get_partitioned_surface_area(n_partitions=self.n_partitions,ord=self.ord)
+        
+        if self.verbose:
+            print('partition done\n')
+        self.get_eye_diameter()
+        
+        if self.verbose:
+            print('eye diameter done\n')
+       
 def main():
     from segment_anything import SamPredictor, sam_model_registry
     # example:

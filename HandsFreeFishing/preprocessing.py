@@ -15,7 +15,7 @@ def get_screen_size():
     return screen_width, screen_height
         
 class LandmarkEditor:
-    def __init__(self, window_name, image, points,point_names=None, box_names = None, radius=10, landmark_length=50,ds=1,monitor_idx=0):   
+    def __init__(self, window_name, image, points, point_names=None, box_names = None, radius=10, landmark_length=50,ds=1,monitor_idx=0):   
         # meta screen data
         self.ds = ds 
         monitors = get_monitors()
@@ -31,6 +31,8 @@ class LandmarkEditor:
         self.window_height = self.ds*int(self.screen_height) 
         
         # parameters
+        self.zoom_scale=1.0
+        self.center_x, self.center_y = image.shape[1]//2, image.shape[0]//2
         self.fontsize = 1.5/self.ds
         self.fontthickness = np.max([int(2/self.ds), 1])
         self.window_name = window_name
@@ -64,6 +66,13 @@ class LandmarkEditor:
                     print(f"{self.MAX_POINTS} landmark points have been captured.")
                     # Optional: Perform an action here after getting both points
                     # e.g., calculate distance, crop ROI, etc.
+        # elif event == cv.EVENT_MOUSEWHEEL:
+        #     # Increase or decrease scale factor based on scroll direction
+        #     if flags > 0: 
+        #         self.zoom_scale += 0.01
+        #     else: 
+        #         self.zoom_scale -= 0.01
+        #     self.center_x, self.center_y = x, y
             
     def moving_mouse_event(self, event, x, y, flags, param):
         # 1. Start Dragging: Check if click is near an existing landmark
@@ -109,15 +118,22 @@ class LandmarkEditor:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, 0)
-            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
+            cv.moveWindow(window_name, self.monitor.x-1, self.monitor.y-1)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)   
             
         # cv.resizeWindow(window_name, self.window_width, self.window_height)
         cv.setMouseCallback(window_name, self.mouse_callback_n_points)
         
         while len(self.points)<self.MAX_POINTS:
             img_display = self.ds_image.copy()
-            
+            # h, w = img_display.shape[:2]
+            # # Calculate new dimensions and display
+            # # self.zoom_scale = max(0.1, self.zoom_scale)
+            # # self.zoom_scale = min(self.zoom_scale, 2)
+            # new_h, new_w = int(h / self.zoom_scale), int(w / self.zoom_scale)
+            # # Calculate top-left corner of the crop (clamped to image boundaries)
+            # start_y = int(self.center_y/self.zoom_scale) - int(new_h/2)
+            # start_x = int(self.center_x/self.zoom_scale) - int(new_w/2)
             # Draw all landmarks
             for i, (px, py) in enumerate(self.points):
                 color = (0, 0, 255) if i == self.selected_point_idx else (255, 0, 0)
@@ -125,6 +141,10 @@ class LandmarkEditor:
                 cv.putText(img_display, self.point_names[i], (px + 10, py - 10), 
                             cv.FONT_HERSHEY_SIMPLEX, self.fontsize, (0, 255, 0), self.fontthickness)
 
+            # Slice and resize
+            # crop = img_display[start_y:start_y + new_h, start_x:start_x + new_w]
+            # res = cv.resize(crop, (w, h), interpolation=cv.INTER_LINEAR)
+            # cv.imshow(window_name, res)
             cv.imshow(window_name, img_display)
             
             # Press 'q' to exit or 's' to print current points
@@ -143,8 +163,8 @@ class LandmarkEditor:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, 0)
-            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
+            cv.moveWindow(window_name, self.monitor.x-1, self.monitor.y-1)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)    
             
         cv.setMouseCallback(window_name, self.moving_mouse_event)
         
@@ -179,8 +199,8 @@ class LandmarkEditor:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, 0)
-            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
+            cv.moveWindow(window_name, self.monitor.x-1, self.monitor.y-1)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)   
             
         self.rois = []
         img_display = self.ds_image.copy()
@@ -216,8 +236,8 @@ class LandmarkEditor:
             cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
         else:
             cv.namedWindow(window_name, cv.WINDOW_NORMAL)
-            cv.moveWindow(window_name, self.monitor.x, 0)
-            # cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)  
+            cv.moveWindow(window_name, self.monitor.x-1, self.monitor.y-1)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)   
         
         cv.setMouseCallback(window_name, self.moving_crop_event)
         self.selected_roi_idx=-1
@@ -260,6 +280,97 @@ class LandmarkEditor:
         
         self.pixels_per_mm = np.round(np.linalg.norm(np.array(point1) - np.array(point2))/self.landmark_length,2)
 
+class LandmarkEditor_juvenile(LandmarkEditor):
+    def __init__(self, window_name, image, 
+                 points,point_names=None, box_names = None, 
+                 radius=10, landmark_length=50,ds=1,monitor_idx=0):
+        # meta screen data
+        self.ds = ds 
+        monitors = get_monitors()
+        if monitor_idx > len(monitors) - 1:
+            warnings.warn('Monitor index is too large, defaulting to 0')
+            monitor_idx=0
+            
+        self.monitor_idx=monitor_idx
+        self.monitor=monitors[monitor_idx]
+        print(f"current monitor={self.monitor}")
+        self.screen_width, self.screen_height = (self.monitor.width,self.monitor.height)
+        self.window_width = self.ds*int(self.screen_width)
+        self.window_height = self.ds*int(self.screen_height) 
+        
+        # parameters
+        self.zoom_scale=1.0
+        self.center_x, self.center_y = image.shape[1]//2, image.shape[0]//2
+        self.fontsize = 1.5/self.ds
+        self.fontthickness = np.max([int(2/self.ds), 1])
+        self.window_name = window_name
+        self.image = image
+        self.ds_image = cv.resize(self.image, (0,0), fx=1/self.ds, fy=1/self.ds) 
+        self.points = points  # List of [x, y]
+        self.selected_point_idx = -1
+        self.dragging = False
+        self.radius = int(radius/self.ds)  # Detection radius for selecting a point
+        self.landmark_length = landmark_length
+        self.MAX_POINTS = len(point_names)
+        self.MAX_BOXES = len(box_names)
+        self.point_names = point_names
+        if self.point_names is None:
+            self.point_names = [str(i) for i in range(1,self.MAX_POINTS+1)]
+            
+        self.box_names = box_names
+        if self.box_names is None:
+            self.box_names = [str(i) for i in range(1,self.MAX_BOXES+1)]
+    
+    def user_crop_image(self):
+        """Gathers bounding box from an image based on user-selected region."""
+
+        # Display the image for user to select the region
+        window_name = f"{self.window_name}: DRAW A BOUNDING BOX AROUND THE {self.box_names[0].upper()}"
+        
+        if self.monitor.is_primary:
+            cv.namedWindow(window_name, cv.WINDOW_FULLSCREEN)
+        else:
+            cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+            cv.moveWindow(window_name, self.monitor.x-1, self.monitor.y-1)
+            cv.setWindowProperty(window_name,cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)   
+            
+        self.rois = []
+        img_display = self.ds_image.copy()
+        
+        while True:
+            
+            if len(self.rois) < self.MAX_BOXES:  
+                self.rois.append(np.array(cv.selectROI(window_name, img_display)))     
+            # Draw all landmarks
+            for i, rect in enumerate(self.rois):
+                x, y, w, h = rect
+                # Use NumPy slicing to crop the image: image[y:y+h, x:x+w]
+                cv.rectangle(img_display, (x,y), (x+w,y+h), (255,0,0),thickness=3)
+                cv.putText(img_display, self.box_names[i], (x + 10, y - 10), 
+                            cv.FONT_HERSHEY_SIMPLEX, self.fontsize, (0, 255, 0), self.fontthickness)
+            
+            
+            
+            if len(self.rois)==self.MAX_BOXES:
+                break
+                # window_name=f"{self.window_name}: DRAW A BOUNDING BOX AROUND THE {self.box_names[len(self.rois)].upper()}"
+            cv.imshow(window_name, img_display)
+            # key = cv.waitKey(1) & 0xFF
+            
+    
+        cv.destroyAllWindows() 
+
+        return self.rois
+    
+    def run(self):
+        self.select_points()
+        self.move_points()
+        self.user_crop_image()
+        self.redo_crop()
+        
+        self.rois = [self.ds*np.array(roi) for roi in self.rois]
+        self.points = [self.ds*np.array(point) for point in self.points]
+        
 def mouse_callback_n_points(event, x, y, flags, param):
     """
     Mouse callback function to capture landmark points.
@@ -734,45 +845,124 @@ def preprocess_adult_steelhead_updated(im_paths, exts, measurement_dir="measurem
             
     return rois, horiz_flips, vert_flips, bad_idxs
 
-def postprocess_landmark_points():
-    # Initial landmark points
-    points = [[100, 100], [200, 200], [300, 100]]
-    selected_idx = -1
-
-    def mouse_callback(event, x, y, flags, param):
-        img=param[0]
-        points=param[1]
-        selected_idx=param[2]
+def preprocess_juvenile_steelhead(im_paths, exts, genetic_ids, life_stages, measurement_dir="measurements", project_dir = None, num_fish=None, landmark_length=50, orientation_prompts=False,ds=1,monitor_idx=0):
         
-        if event == cv.EVENT_LBUTTONDOWN:
-            # Check which point is clicked (within threshold)
-            for i, pt in enumerate(points):
-                if np.linalg.norm(np.array(pt) - np.array([x, y])) < 10:
-                    selected_idx = i
-                    break
-                    
-        elif event == cv.EVENT_MOUSEMOVE:
-            # Update point position while dragging
-            if selected_idx != -1:
-                points[selected_idx] = [x, y]
+    scales = []
+    # eye_rois = []
+    # head_rois = []
+    yolk_sac_rois = []
+    rois = []
+    horiz_flips = []
+    vert_flips = []
+    qualities = []
+    bad_idxs = []
+    
+        
+    for (i, im_path) in enumerate(im_paths):
+        
+        print(im_path)
+        
+        found_im_path=False
+        for ext in exts:
+            im_path_temp=im_path+ext
+            if os.path.exists(im_path_temp):
+                im_path = im_path_temp
+                found_im_path=True
+                break
+            
+        if not found_im_path:
+            print(f"Failed to find image path: {im_path}")
+            bad_idxs.append(i)
+            scales.append(None)
+            rois.append(None)
+            horiz_flips.append(None)
+            vert_flips.append(None)
+            qualities.append(None)
+        else:
+            dir, im_name, ext = splice_im_path(im_path)            
+            if os.path.exists(os.path.join(measurement_dir, project_dir, im_name + '.csv')):
+                pass # don't overwrite
+            else:
+                print('\nmade it!\n')
+                print(f"preprocessing im_path with genetic id {genetic_ids[i]}")
+                print(f"life stage is: {life_stages[i].lower()}")
+
+                image=cv.imread(im_path)
+                                    
+                img_copy=image.copy()
+                is_hatched = (life_stages[i].strip().lower() == 'hatched')
+                print(is_hatched)
                 
-        elif event == cv.EVENT_LBUTTONUP:
-            selected_idx = -1
+                if is_hatched:
+                    point_names=['scale pt 1', 'scale pt 2','eyeball', 'yolk sac']
+                    box_names = ['fish', 'yolk sac']
+                else:
+                    point_names=['scale pt 1', 'scale pt 2','eyeball']
+                    box_names = ['fish']
+                    
+                print(point_names)
+                radius=13
+                landmark_gui = LandmarkEditor_juvenile(im_path, img_copy, [], 
+                                              point_names=point_names,box_names=box_names,
+                                              radius=radius, landmark_length=landmark_length,ds=ds,
+                                              monitor_idx=monitor_idx)
+                landmark_gui.run()
+                landmark_gui.get_scale()
+                
+                pixels_per_mm = landmark_gui.pixels_per_mm
+                fin_points = landmark_gui.points[2:]
+                
+                if is_hatched:
+                    roi = landmark_gui.rois[0]
+                    yolk_sac_roi = landmark_gui.rois[1]    
+                else:
+                    yolk_sac_roi = None
+                    roi = landmark_gui.rois[0]
+                
+                
+                if orientation_prompts:
+                    horiz_flip = input('Enter 0 if the fish is facing left, 1 if right: ')
+                    if horiz_flip=='1':
+                        print('horizontal flip is true')
+                    else:
+                        horiz_flip='0'
 
-    img = np.zeros((500, 500, 3), np.uint8)
-    # Window setup
-    cv.namedWindow("Landmarks")
-    cv.setMouseCallback("Landmarks", mouse_callback,param=[img,points,selected_idx])
-
-    while True:
+                    vertical_flip = input('\nEnter 0 if the fish is right-side up, 1 if upside down: ')
+                    if vertical_flip=='1':
+                        print('vertical flip is true')
+                    else:
+                        vertical_flip='0'
+                        
+                    quality = input('\nEnter 0 for a good quality image, 1 for bad quality: ')
+                    if quality=='1':
+                        print('bad quality is true')
+                    else:
+                        quality='0'
+                else:
+                    horiz_flip='0'
+                    vertical_flip='0'
+                    quality='0'
+                    
+                scales.append(1/pixels_per_mm)
+                # eye_rois.append(eye_roi)
+                # head_rois.append(head_roi)
+                yolk_sac_rois.append(yolk_sac_roi)
+                rois.append(roi)
+                horiz_flips.append(horiz_flip)
+                vert_flips.append(vertical_flip)
+                qualities.append(quality)
+                
+                if not os.path.exists(os.path.join(measurement_dir,project_dir)):
+                    os.makedirs(os.path.join(measurement_dir,project_dir),exist_ok=True)
+                
+                np.save(os.path.join(measurement_dir, project_dir, im_name+'_fin_points.npy'), np.array(fin_points))
+                    
+                with open(os.path.join(measurement_dir, project_dir, im_name+'.csv'), 'w', newline='') as myfile:
+                    wr = csv.writer(myfile)
+                    wr.writerow([1/pixels_per_mm, roi, yolk_sac_roi, horiz_flip, vertical_flip, quality])
         
-        for pt in points:
-            cv.circle(img, tuple(pt), 5, (0, 255, 0), -1)
-        
-        cv.imshow("Landmarks", img)
-        if cv.waitKey(1) & 0xFF == 27: # Press Esc to exit
-            break
-    cv.destroyAllWindows()
+            
+    return rois, horiz_flips, vert_flips, bad_idxs
 
 def main():
     
@@ -786,7 +976,6 @@ def main():
         os.makedirs(os.path.join('measurements','example_fish'),exist_ok=True)
         
     get_rois_flips_and_bad_paths(im_paths)
-
 
 def testing():
     from matplotlib import pyplot as plt
