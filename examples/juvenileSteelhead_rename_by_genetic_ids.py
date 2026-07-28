@@ -63,7 +63,7 @@ if __name__ == "__main__":
         
     dir_name=os.path.join("sushi", project_name)
 
-    im_path_exts= glob.glob(os.path.join(dir_name,'*')) + glob.glob(os.path.join(dir_name,'*/*'))
+    im_path_exts= glob.glob(os.path.join(dir_name,'*')) + glob.glob(os.path.join(dir_name,'*','*'))
     # im_path_exts=['sushi/juvenileSteelhead_FEH5/juvenileSteelhead_FEH5T/FEH5T_2026.03.13_01.JPG']
                   #'sushi/juvenileSteelhead_FEH5/juvenileSteelhead_FEH5T/FEH5T_2026.03.13_01.JPG']
     
